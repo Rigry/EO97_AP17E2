@@ -1,0 +1,4 @@
+build/*
+!/build/EO94_IC_ABB_ACS.bin
+!/build/EO94_IC_ABB_ACS.hex
+core
