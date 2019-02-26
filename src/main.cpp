@@ -7,6 +7,7 @@
 #include "pin.h"
 #include "flash.h"
 #include "literals.h"
+#include "main.h"
 
 extern "C" void init_clock ()
 {
@@ -29,7 +30,10 @@ extern "C" void init_clock ()
       .wait_PLL_ready();
 }
 
+///////////////// переделать метод channel f4_dma_stream /////////////////////////
+
 int main()
 {
+   process();
    return 0;
 }
