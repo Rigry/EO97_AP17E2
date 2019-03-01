@@ -1,0 +1,23 @@
+Start testing: Feb 28 11:48 MSK
+----------------------------------------------------------
+1/1 Testing: test_
+1/1 Test: test_
+Command: "/net/factory/users/aag/code/EO97_AP17E2/test/cmake/build/test_"
+Directory: /net/factory/users/aag/code/EO97_AP17E2/test/cmake
+"test_" start time: Feb 28 11:48 MSK
+Output:
+----------------------------------------------------------
+Running 1 test case...
+unknown location(0): fatal error: in "test_suite_main/make": memory access violation at address: 0x08060000: no mapping at fault address
+/net/factory/users/aag/code/EO97_AP17E2/test/test_.cpp(17): last checkpoint: "make" entry.
+
+*** 1 failure is detected in the test module "test"
+<end of output>
+Test time =   0.02 sec
+----------------------------------------------------------
+Test Failed.
+"test_" end time: Feb 28 11:48 MSK
+"test_" time elapsed: 00:00:00
+----------------------------------------------------------
+
+End testing: Feb 28 11:48 MSK

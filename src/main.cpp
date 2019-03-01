@@ -30,7 +30,37 @@ extern "C" void init_clock ()
       .wait_PLL_ready();
 }
 
+using TX  = mcu::PA9;
+using RX  = mcu::PA10;
+using RTS = mcu::PA12;
+using PWM_pin = mcu::PC9;
+
 int main()
 {
-   process();
+   Flash<Flash_data, mcu::FLASH::Sector::_7> flash{};
+
+   decltype(auto) modbus = Modbus_slave<In_regs, Out_regs>
+                 ::make<mcu::Periph::USART1, TX, RX, RTS>
+                       (flash.modbus_address, flash.uart_set);
+
+   modbus.outRegs.device_code       = 9;
+   modbus.outRegs.factory_number    = flash.factory_number;
+   modbus.outRegs.modbus_address    = flash.modbus_address;
+   modbus.outRegs.uart_set          = flash.uart_set;
+   modbus.arInRegsMax[ADR(uart_set)]= 0b11111111;
+   modbus.inRegsMin.modbus_address  = 1;
+   modbus.inRegsMax.modbus_address  = 255;
+
+
+   decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>();
+
+   ADC_ adc;
+
+   using Flash  = decltype(flash);
+   using Modbus = Modbus_slave<In_regs, Out_regs>;
+
+   Task<Flash, Modbus> task {adc, pwm, flash, modbus}; 
+   
+   while(1)
+      task();
 }
