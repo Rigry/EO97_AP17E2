@@ -2,33 +2,14 @@
 #define F_OSC   8000000UL
 #define F_CPU   168000000UL
 
+#include "init_clock.h"
 #include "periph_rcc.h"
-#include "periph_dma.h"
+#include "periph_flash.h"
 #include "pin.h"
-#include "flash.h"
 #include "literals.h"
 #include "main.h"
 
-extern "C" void init_clock ()
-{
-   mcu::make_reference<mcu::Periph::FLASH>()
-      .set (mcu::FLASH::Latency::_5);
-
-   mcu::make_reference<mcu::Periph::RCC>()
-      .on_HSE()
-      .wait_HSE_ready()
-      .set      (mcu::RCC::AHBprescaler::AHBnotdiv)
-      .set_APB1 (mcu::RCC::APBprescaler::APBdiv4)
-      .set_APB2 (mcu::RCC::APBprescaler::APBdiv2)
-      .set      (mcu::RCC:: SystemClock::CS_PLL)
-      .set_PLLM<4>()
-      .set_PLLN<168>()
-      .set      (mcu::RCC::     PLLPdiv::_2)
-      // .set_PLLQ<4>()
-      .set      (mcu::RCC::   PLLsource::HSE)
-      .on_PLL()
-      .wait_PLL_ready();
-}
+extern "C" void init_clock () { init_clock<F_OSC, F_CPU>(); }
 
 using TX  = mcu::PA9;
 using RX  = mcu::PA10;
@@ -61,6 +42,8 @@ int main()
 
    Task<Flash, Modbus> task {adc, pwm, flash, modbus}; 
    
-   while(1)
+   while(1){
       task();
+      __WFI();
+   }
 }

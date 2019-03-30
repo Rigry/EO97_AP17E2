@@ -1,6 +1,6 @@
 TARGET_F4 = EO97_AP17E2
 DEBUG = 1
-OPT = -Os
+OPT = -O0
 CPPSTD =-std=c++17
 BUILD_DIR = build
 
@@ -8,7 +8,7 @@ BUILD_DIR = build
 # source
 ######################################
 CPP_SOURCES_F4 = ./src/main.cpp
-LIBRARY_PATH = /net/factory/users/aag/code/mculib3
+LIBRARY_PATH = ../mculib3
 
 ASM_SOURCES_F4 = $(LIBRARY_PATH)/STM32F4_files/startup_stm32f405xx.s
 LDSCRIPT_F4 = $(LIBRARY_PATH)/STM32F4_files/STM32F405RGTx_FLASH.ld
@@ -40,15 +40,12 @@ BIN = $(CP) -O binary -S
 #######################################
 # CFLAGS
 #######################################
-CPU_F4 = -mcpu=cortex-m0
-
-# NONE for Cortex-M0/M0+/M3
-FPU_F4 =
-
-FLOAT-ABI_F4 =
+CPU_F4 = -mcpu=cortex-m4
+FPU_F4 = -mfpu=fpv4-sp-d16
+FLOAT-ABI_F4 = -mfloat-abi=hard
 
 # mcu
-MCU_F1 = $(CPU_F4) -mthumb $(FPU_F4) $(FLOAT-ABI_F4)
+MCU_F4 = $(CPU_F4) -mthumb $(FPU_F4) $(FLOAT-ABI_F4)
 
 # compile gcc flags
 ASFLAGS_F4 = $(MCU_F4) $(OPT) -Wall -fdata-sections -ffunction-sections
@@ -67,7 +64,7 @@ CFLAGS_F4 += -MMD -MP -MF"$(@:%.o=%.d)" -MT"$(@:%.o=%.d)"
 # libraries
 LIBS = -lc -lm -lnosys
 
-LDFLAGS_F4  = $(MCU_F1) -specs=nano.specs -specs=nosys.specs
+LDFLAGS_F4  = $(MCU_F4) -specs=nano.specs -specs=nosys.specs
 LDFLAGS_F4 += -T$(LDSCRIPT_F4) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET_F4).map,--cref -Wl,--gc-sections
 
 # default action: build all

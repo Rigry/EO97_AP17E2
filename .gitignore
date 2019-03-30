@@ -1,4 +1,5 @@
 build/*
 !/build/EO97_AP17E2.bin
 !/build/EO97_AP17E2.hex
+.vscode/ipch
 core
