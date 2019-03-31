@@ -18,7 +18,7 @@ using PWM_pin = mcu::PC9;
 
 int main()
 {
-   Flash<Flash_data, mcu::FLASH::Sector::_7> flash{};
+   Flash<Flash_data, mcu::FLASH::Sector::_8> flash{};
 
    decltype(auto) modbus = Modbus_slave<In_regs, Out_regs>
                  ::make<mcu::Periph::USART1, TX, RX, RTS>

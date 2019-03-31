@@ -74,10 +74,12 @@ public:
 
    void operator()() {
       
-      if (modbus.outRegs.power and timer.event()) {
+      if (modbus.inRegs.power and timer.event()) {
          modbus.outRegs.duty_cycle 
-            = pwm.duty_cycle += adc.power > modbus.outRegs.power ? -1 : 1;
+            = pwm.duty_cycle += adc.power > modbus.inRegs.power ? -1 : 1;
       }
+
+      modbus.outRegs.power = adc.power;
 
       modbus([&](uint16_t registrAddress) {
             static bool unblock = false;
@@ -110,9 +112,7 @@ public:
                   = modbus.inRegs.frequency;
             break;
             case ADR(power):
-               modbus.outRegs.power
-               = modbus.inRegs.power;
-               if (modbus.outRegs.power) 
+               if (modbus.inRegs.power) 
                   pwm.out_enable(); 
                else {
                   pwm.out_disable();
