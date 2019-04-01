@@ -74,17 +74,12 @@ public:
 
    void operator()() {
 
-      modbus.outRegs.duty_cycle = pwm.duty_cycle = 50;
-      modbus.outRegs.power      = adc.power = 100;
+      // modbus.outRegs.duty_cycle = pwm.duty_cycle = 50;
+      // modbus.outRegs.power      = adc.power = 100;
       
-<<<<<<< HEAD
-      if (modbus.outRegs.power and timer.event()) {
-         pwm.duty_cycle += adc.power > modbus.outRegs.power ? -1 : 1;
-=======
       if (modbus.inRegs.power and timer.event()) {
          modbus.outRegs.duty_cycle 
             = pwm.duty_cycle += adc.power > modbus.inRegs.power ? -1 : 1;
->>>>>>> 66c8677d9d25a794c181130ccae937f6019653f1
       }
 
       modbus.outRegs.power = adc.power;
