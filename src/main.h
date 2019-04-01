@@ -73,10 +73,12 @@ public:
    {}
 
    void operator()() {
+
+      modbus.outRegs.duty_cycle = pwm.duty_cycle = 50;
+      modbus.outRegs.power      = adc.power = 100;
       
       if (modbus.outRegs.power and timer.event()) {
-         modbus.outRegs.duty_cycle 
-            = pwm.duty_cycle += adc.power > modbus.outRegs.power ? -1 : 1;
+         pwm.duty_cycle += adc.power > modbus.outRegs.power ? -1 : 1;
       }
 
       modbus([&](uint16_t registrAddress) {
