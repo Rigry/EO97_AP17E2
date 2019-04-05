@@ -2,6 +2,7 @@
 
 #include "pin.h"
 #include "pwm_.h"
+#include "adc.h"
 #include "flash.h"
 #include "timers.h"
 #include "modbus_slave.h"
@@ -12,8 +13,11 @@
 // using PWM_t = ::PWM;
 // #endif
 
+constexpr auto conversion_on_channel {16};
 struct ADC_{
-    uint16_t power{0};
+    ADC_average& control = ADC_average::make<mcu::Periph::ADC1>(conversion_on_channel);
+    ADC_channel& power   = control.add_channel<mcu::PA4>();
+   // int power{0};
 };
 
 struct In_regs {
@@ -70,16 +74,20 @@ public:
       , pwm {pwm}
       , flash {flash}
       , modbus {modbus}
-   {}
+   {
+      adc.control.set_callback ([&]{
+      pwm.duty_cycle += adc.power > modbus.inRegs.power ? -1 : 1;
+      });
+      adc.control.start();
+   }
 
    void operator()() {
 
-      // modbus.outRegs.duty_cycle = pwm.duty_cycle = 50;
-      // modbus.outRegs.power      = adc.power = 100;
-      
       if (modbus.inRegs.power and timer.event()) {
          modbus.outRegs.duty_cycle 
-            = pwm.duty_cycle += adc.power > modbus.inRegs.power ? -1 : 1;
+            = pwm.duty_cycle;
+      // if (adc.power == 2600) adc.power = 0;
+      // adc.power++;
       }
 
       modbus.outRegs.power = adc.power;

@@ -24,7 +24,7 @@ int main()
                  ::make<mcu::Periph::USART1, TX, RX, RTS>
                        (flash.modbus_address, flash.uart_set);
 
-   decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>();
+   decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(990);
    ADC_ adc;
 
    modbus.outRegs.device_code       = 9;
@@ -40,6 +40,12 @@ int main()
    using Modbus = Modbus_slave<In_regs, Out_regs>;
 
    Task<Flash, Modbus> task {adc, pwm, flash, modbus}; 
+
+   // adc.control.set_callback ([&]{
+   //      led = adc.voltage < _2V;
+   // });
+      
+   
    
    while(1){
       task();
