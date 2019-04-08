@@ -24,7 +24,7 @@ int main()
                  ::make<mcu::Periph::USART1, TX, RX, RTS>
                        (flash.modbus_address, flash.uart_set);
 
-   decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(990);
+   decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(450);
    ADC_ adc;
 
    modbus.outRegs.device_code       = 9;
