@@ -8,7 +8,7 @@ BUILD_DIR = build
 # source
 ######################################
 CPP_SOURCES_F4 = ./src/main.cpp
-LIBRARY_PATH = ../mculib3
+LIBRARY_PATH = mculib3
 
 ASM_SOURCES_F4 = $(LIBRARY_PATH)/STM32F4_files/startup_stm32f405xx.s
 LDSCRIPT_F4 = $(LIBRARY_PATH)/STM32F4_files/STM32F405RGTx_FLASH.ld
@@ -68,7 +68,7 @@ LDFLAGS_F4  = $(MCU_F4) -specs=nano.specs -specs=nosys.specs
 LDFLAGS_F4 += -T$(LDSCRIPT_F4) $(LIBS) -Wl,-Map=$(BUILD_DIR)/$(TARGET_F4).map,--cref -Wl,--gc-sections
 
 # default action: build all
-all: clean \
+all: submodule clean \
 $(BUILD_DIR)/$(TARGET_F4).elf $(BUILD_DIR)/$(TARGET_F4).hex $(BUILD_DIR)/$(TARGET_F4).bin
 	
 
@@ -114,6 +114,11 @@ util:
 
 test_:
 	$(MAKE) -C ./test/
+
+submodule:
+	git submodule update --init
+	cd mculib3/ && git fetch
+	cd mculib3/ && git checkout v1.01
   
 #######################################
 # dependencies
