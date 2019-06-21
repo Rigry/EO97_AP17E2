@@ -7,7 +7,8 @@
 #include "periph_flash.h"
 #include "pin.h"
 #include "literals.h"
-#include "main.h"
+// #include "main.h"
+#include "tune_up.h"
 
 extern "C" void init_clock () { init_clock<F_OSC, F_CPU>(); }
 
@@ -15,16 +16,23 @@ using TX  = mcu::PA9;
 using RX  = mcu::PA10;
 using RTS = mcu::PA12;
 using PWM_pin = mcu::PC9;
+using LED = mcu::PA15;
+using Enter = mcu::PA8;
 
 int main()
 {
-   Flash<Flash_data, mcu::FLASH::Sector::_8> flash{};
+   Flash<Flash_data, mcu::FLASH::Sector::_10> flash{};
+
+   decltype(auto) enter = mcu::Button::make<Enter>(); 
+   decltype(auto) led = Pin::make<LED, mcu::PinMode::Output>();
 
    decltype(auto) modbus = Modbus_slave<In_regs, Out_regs>
                  ::make<mcu::Periph::USART1, TX, RX, RTS>
                        (flash.modbus_address, flash.uart_set);
 
-   decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(490);
+   volatile decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(490);
+   volatile decltype(auto) encoder = Encoder::make<mcu::Periph::TIM8, mcu::PC6, mcu::PC7, true>();
+   // encoder = 18000;
    ADC_ adc;
 
    modbus.outRegs.device_code       = 9;
@@ -38,8 +46,10 @@ int main()
 
    using Flash  = decltype(flash);
    using Modbus = Modbus_slave<In_regs, Out_regs>;
+   // using Button = mcu::Button;
 
-   Task<Flash, Modbus> task {adc, pwm, flash, modbus}; 
+   Task<Flash, Modbus> task {adc, pwm, led, flash, enter, modbus, encoder};
+   // Task<Flash, Modbus> task {adc, pwm, flash, modbus};  
 
    // adc.control.set_callback ([&]{
    //      led = adc.voltage < _2V;
@@ -49,6 +59,6 @@ int main()
    
    while(1){
       task();
-      __WFI();
+      // __WFI();
    }
 }
