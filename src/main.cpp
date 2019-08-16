@@ -23,7 +23,11 @@ using Left = mcu::PB13;
 
 int main()
 {
-   Flash<Flash_data, mcu::FLASH::Sector::_10> flash{};
+   [[maybe_unused]] auto _ = Flash_updater<
+          mcu::FLASH::Sector::_9
+        , mcu::FLASH::Sector::_10
+    >::make (&flash);
+   // Flash<Flash_data, mcu::FLASH::Sector::_10> flash{};
 
    decltype(auto) enter = mcu::Button::make<Enter>();
    decltype(auto) reset = mcu::Button::make<Left>();
@@ -49,11 +53,11 @@ int main()
    modbus.inRegsMax.modbus_address  = 255;
 
 
-   using Flash  = decltype(flash);
+   // using Flash  = decltype(flash);
    using Modbus = Modbus_slave<In_regs, Out_regs>;
    // using Button = mcu::Button;
 
-   Task<Flash, Modbus> task {adc, pwm, led_green, led_red, flash, enter, reset, modbus, encoder};
+   Task<Flash_data, Modbus> task {adc, pwm, led_green, led_red, flash, enter, reset, modbus, encoder};
    // Task<Flash, Modbus> task {adc, pwm, flash, modbus};  
 
    // adc.control.set_callback ([&]{

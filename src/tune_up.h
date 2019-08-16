@@ -4,6 +4,7 @@
 #include "pwm_.h"
 #include "adc.h"
 #include "flash.h"
+// #include "safe_flash.h"
 #include "timers.h"
 #include "encoder.h"
 #include "button_old.h"
@@ -66,11 +67,11 @@ struct Flash_data {
    };
    uint8_t  modbus_address = 1;
    uint16_t model_number   = 0;
-};
+}flash;
 
 #define ADR(reg) GET_ADR(In_regs, reg)
 
-template<class Flash, class Modbus>
+template<class Flash_data, class Modbus>
 class Task
 { 
    enum State {wait, pause, scan_up, scan_down, set_resonance, set_power, work} state {State::wait};
@@ -79,7 +80,7 @@ class Task
    PWM& pwm;
    Pin& led_green;
    Pin& led_red;
-   Flash& flash;
+   Flash_data& flash;
    mcu::Button& enter;
    mcu::Button& reset;
    Modbus& modbus;
@@ -109,7 +110,7 @@ class Task
    }
 
 public:
-   Task(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Flash& flash, mcu::Button& enter, mcu::Button& reset, Modbus& modbus, Encoder& encoder) 
+   Task(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Flash_data& flash, mcu::Button& enter, mcu::Button& reset, Modbus& modbus, Encoder& encoder) 
       : adc {adc}
       , pwm {pwm}
       , led_green {led_green}

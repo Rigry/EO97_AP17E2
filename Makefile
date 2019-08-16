@@ -21,6 +21,7 @@ C_INCLUDES += -I$(LIBRARY_PATH)/STM32F4_files/CMSIS
 C_INCLUDES += -I$(LIBRARY_PATH)/src
 C_INCLUDES += -I$(LIBRARY_PATH)/src/periph
 C_INCLUDES += -I$(LIBRARY_PATH)/src/bits
+C_INCLUDES += -I$(LIBRARY_PATH)/magic_get/include
 
 
 #######################################
@@ -118,7 +119,8 @@ test_:
 submodule:
 	git submodule update --init
 	cd mculib3/ && git fetch
-	cd mculib3/ && git checkout v1.01
+	cd mculib3/ && git checkout v1.04
+	cd mculib3/ && git submodule update --init
   
 #######################################
 # dependencies

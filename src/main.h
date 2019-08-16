@@ -55,7 +55,7 @@ struct Flash_data {
    };
    uint8_t  modbus_address = 1;
    uint16_t model_number   = 0;
-};
+} flash;
 
 #define ADR(reg) GET_ADR(In_regs, reg)
 
