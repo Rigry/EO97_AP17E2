@@ -4,18 +4,11 @@
 #include "pwm_.h"
 #include "adc.h"
 #include "flash.h"
-// #include "safe_flash.h"
 #include "timers.h"
 #include "encoder.h"
-#include "button_old.h"
+// #include "button_old.h"
 #include "modbus_slave.h"
 #include "literals.h"
-
-// #if defined(USE_MOCK_PWM)
-// using PWM_t = mock::PWM;
-// #else
-// using PWM_t = ::PWM;
-// #endif
 
 constexpr auto conversion_on_channel {16};
 struct ADC_{
@@ -53,7 +46,7 @@ struct Out_regs {
    uint16_t current;                // 7
    uint16_t current_resonance;      // 8
 
-}__attribute__((packed));
+};//__attribute__((packed));
 
 struct Flash_data {
    uint16_t factory_number = 0;
@@ -81,8 +74,8 @@ class Task
    Pin& led_green;
    Pin& led_red;
    Flash_data& flash;
-   mcu::Button& enter;
-   mcu::Button& reset;
+   // mcu::Button& enter;
+   // mcu::Button& reset;
    Modbus& modbus;
    Encoder& encoder;
    Timer timer{100_ms};
@@ -110,14 +103,14 @@ class Task
    }
 
 public:
-   Task(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Flash_data& flash, mcu::Button& enter, mcu::Button& reset, Modbus& modbus, Encoder& encoder) 
+   Task(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Flash_data& flash, /*mcu::Button& enter, mcu::Button& reset,*/ Modbus& modbus, Encoder& encoder) 
       : adc {adc}
       , pwm {pwm}
       , led_green {led_green}
       , led_red {led_red}
       , flash {flash}
-      , enter {enter}
-      , reset {reset}
+      // , enter {enter}
+      // , reset {reset}
       , modbus {modbus}
       , encoder {encoder}
    {
@@ -133,8 +126,8 @@ public:
 
    void operator()() {
 
-      led_red   = search ^= reset;
-      led_green = pwm    ^= enter;
+      // led_red   = search ^= reset;
+      // led_green = pwm    ^= enter;
       state = pwm ? state : State::wait;
       modbus.outRegs.frequency          = pwm.frequency;
       modbus.outRegs.resonanse          = resonance;
