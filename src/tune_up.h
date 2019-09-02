@@ -9,73 +9,72 @@
 // #include "button_old.h"
 #include "modbus_slave.h"
 #include "literals.h"
-
+   
 constexpr auto conversion_on_channel {16};
 struct ADC_{
    ADC_average& control = ADC_average::make<mcu::Periph::ADC1>(conversion_on_channel);
    ADC_channel& current = control.add_channel<mcu::PB0>();
 };
 
+// структура для меню, битовое поле не лезет 
+struct Mode {
+   bool on          {false};
+   bool search      {false};
+   bool manual      {false};
+   bool manual_tune {false};
+} state;
+
 struct Operation {
-   enum Mode      {wait = 0b00, auto_search, manual_search, work, emergency};
-   Mode mode :3; //Bit 0-1 Mode: wait (00), auto_search mode (01), manual_search (10), work(11), emergency(100);
-   uint16_t  :13; //Bits 15:2 res: Reserved, must be kept cleared
+   bool on            :1; 
+   bool search        :1;
+   bool manual        :1;
+   bool manual_tune   :1;
+   uint16_t           :12; //Bits 11:2 res: Reserved, must be kept cleared
 }__attribute__((packed));
 
-struct In_regs {
+   struct In_regs {
    
-   UART::Settings uart_set;         // 0
-   uint16_t modbus_address;         // 1
-   uint16_t password;               // 2
-   uint16_t factory_number;         // 3
-   uint16_t frequency;              // 4
-   uint16_t power;                  // 5
-   Operation operation;             // 6
+      UART::Settings uart_set;         // 0
+      uint16_t modbus_address;         // 1
+      uint16_t password;               // 2
+      uint16_t factory_number;         // 3
+      uint16_t frequency;              // 4
+      uint16_t power;                  // 5
+      Operation operation;             // 6
 
-}__attribute__((packed));
+   }__attribute__((packed));
 
-struct Out_regs {
+   struct Out_regs {
 
-   uint16_t device_code;            // 0
-   uint16_t factory_number;         // 1
-   UART::Settings uart_set;         // 2
-   uint16_t modbus_address;         // 3
-   uint16_t duty_cycle;             // 4
-   uint16_t frequency;              // 5
-   uint16_t resonanse;              // 6
-   uint16_t current;                // 7
-   uint16_t current_resonance;      // 8
+      uint16_t device_code;            // 0
+      uint16_t factory_number;         // 1
+      UART::Settings uart_set;         // 2
+      uint16_t modbus_address;         // 3
+      uint16_t duty_cycle;             // 4
+      uint16_t frequency;              // 5
+      uint16_t resonance;              // 6
+      uint16_t current;                // 7
+      uint16_t current_resonance;      // 8
+      uint16_t temperatura;            // 9
+      Operation operation;             // 10
 
-};//__attribute__((packed));
+   };//__attribute__((packed));
 
-struct Flash_data {
-   uint16_t factory_number = 0;
-   UART::Settings uart_set = {
-      .parity_enable  = false,
-      .parity         = USART::Parity::even,
-      .data_bits      = USART::DataBits::_8,
-      .stop_bits      = USART::StopBits::_1,
-      .baudrate       = USART::Baudrate::BR9600,
-      .res            = 0
-   };
-   uint8_t  modbus_address = 1;
-   uint16_t model_number   = 0;
-}flash;
+
 
 #define ADR(reg) GET_ADR(In_regs, reg)
 
 template<class Flash_data, class Modbus>
-class Task
+class Generator
 { 
-   enum State {wait, pause, scan_up, scan_down, set_resonance, set_power, work} state {State::wait};
+   enum State {wait, manual, manual_tune, pause, scan_up, scan_down, set_resonance, set_power, work} state {State::wait};
    
    ADC_& adc;
    PWM& pwm;
    Pin& led_green;
    Pin& led_red;
+   Mode& mode;
    Flash_data& flash;
-   // mcu::Button& enter;
-   // mcu::Button& reset;
    Modbus& modbus;
    Encoder& encoder;
    Timer timer{100_ms};
@@ -87,30 +86,36 @@ class Task
    uint16_t resonance{0};
    uint16_t resonance_up{0};
    uint16_t resonance_down{0};
-   uint16_t min_frequency {19_kHz};
-   uint16_t max_frequency {25_kHz};
+   uint16_t range_frequency{ 2_kHz};
+   uint16_t work_frequency {18_kHz};
+   uint16_t min_frequency  {19_kHz};
+   uint16_t max_frequency  {25_kHz};
    uint16_t duty_cycle {200};
    int16_t  step {10_Hz};
    bool scan {false};
-   bool search{true};
+   bool search{false};
    bool power();
    bool scanning_up();
    bool scanning_down ();
    bool is_resonance();
-   uint16_t milliamper (uint16_t adc) 
-   {
-      return adc * 3.3 * 0.125 / (16 * 4095) * 1000; // 0.125 коэффициент для пересчета, 1000 - для передачи в мА
+
+   uint16_t milliamper(uint16_t adc) { return adc * 3.3 * 0.125 / (16 * 4095) * 1000;} // 0.125 коэффициент для пересчета, 1000 - для передачи в мА
+
+   void if_off_to_wait() { 
+      if (state != State::manual and state != State::manual_tune)
+         state = pwm ? state : State::wait; 
    }
 
 public:
-   Task(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Flash_data& flash, /*mcu::Button& enter, mcu::Button& reset,*/ Modbus& modbus, Encoder& encoder) 
+   
+   Generator(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Mode& mode
+           , Flash_data& flash, Modbus& modbus, Encoder& encoder) 
       : adc {adc}
       , pwm {pwm}
       , led_green {led_green}
       , led_red {led_red}
+      , mode {mode}
       , flash {flash}
-      // , enter {enter}
-      // , reset {reset}
       , modbus {modbus}
       , encoder {encoder}
    {
@@ -118,22 +123,35 @@ public:
       //    pwm.duty_cycle += adc.power > modbus.inRegs.power ? -1 : 1;
       // });
       adc.control.start();
-      encoder = 1800;
+      encoder = max_frequency;
       pwm.duty_cycle = 100;
       pwm.frequency = max_frequency;
-      
    }
 
    void operator()() {
 
-      // led_red   = search ^= reset;
-      // led_green = pwm    ^= enter;
-      state = pwm ? state : State::wait;
-      modbus.outRegs.frequency          = pwm.frequency;
-      modbus.outRegs.resonanse          = resonance;
-      modbus.outRegs.current            = milliamper(adc.current);
-      modbus.outRegs.current_resonance  = milliamper(current);
-      modbus.outRegs.duty_cycle         = pwm.duty_cycle;
+      (mode.on and flash.resonance) or (mode.on and search) ? pwm.out_enable() : pwm.out_disable(); // вкл по кнопке энкодера
+
+      mode.on = pwm ? mode.on : false;
+      
+      led_red   = search; // индикация нужен поиск, погаснет, когда поиск закончится
+      led_green = pwm;    // индикация работы генератора
+
+      modbus.outRegs.frequency               = pwm.frequency;
+      flash.resonance                        = 
+      modbus.outRegs.resonance               = resonance;
+      modbus.outRegs.current                 = milliamper(adc.current);
+      modbus.outRegs.current_resonance       = milliamper(current);
+      modbus.outRegs.duty_cycle              = pwm.duty_cycle;
+      modbus.outRegs.operation.on            = mode.on;
+      modbus.outRegs.operation.search        = search = flash.search;
+      modbus.outRegs.operation.manual        = flash.manual;
+      modbus.outRegs.operation.manual_tune   = flash.manual_tune;
+
+      work_frequency = flash.work_frequency;
+      min_frequency  = work_frequency - range_frequency;
+      max_frequency  = work_frequency + range_frequency;
+      duty_cycle     = flash.power * 5;
       
       modbus([&](uint16_t registrAddress) {
             static bool unblock = false;
@@ -149,7 +167,7 @@ public:
                   = modbus.inRegs.modbus_address;
             break;
             case ADR(password):
-               unblock = modbus.inRegs.password == 208;
+               unblock = modbus.inRegs.password == 127;
             break;
             case ADR(factory_number):
                if (unblock) {
@@ -165,12 +183,37 @@ public:
 
       switch (state) {
          case wait:
-            if (pwm & not search) {
+            if (flash.manual) {
+               state = State::manual;
+               pwm.frequency = encoder = work_frequency;
+            } else if (flash.manual_tune) {
+               state = State::manual_tune;
+               pwm.frequency = encoder = work_frequency;
+            } else if (pwm and not search) {
                delay.start(3000_ms);
                state = State::set_resonance;
-            } else if (pwm & search) {
+            } else if (pwm and search) {
                state = State::pause;
+            } 
+         break;
+         case manual:
+            pwm.duty_cycle = duty_cycle;
+            pwm.frequency  = encoder;
+            if (not search) {
+               flash.resonance = resonance = pwm.frequency;
             }
+            if (not flash.manual) {
+               state = State::wait;
+            }
+         break;
+         case manual_tune:
+            if (search) {
+               pwm.duty_cycle = 100;
+               pwm.frequency = encoder;
+            } else {
+               flash.resonance = resonance = pwm.frequency;
+               state = State::set_power;
+            } 
          break;
          case pause:
             if (delay.done()) {
@@ -189,13 +232,15 @@ public:
          break;
          case scan_up:
             if (not scanning_up()) {
-               search = false;
+               flash.search = false;
+               resonance = current_up > current_down ? resonance_up : resonance_down;
                state = State::set_resonance;
             }
          break;
          case set_resonance:
-            if (is_resonance()) 
+            if (is_resonance()) {
                state = State::set_power;
+            }
          break;
          case set_power:
             if (power()) 
@@ -219,12 +264,14 @@ public:
          break;
       } //switch (state)
 
+      if_off_to_wait();
+
    }//operator
 
 };
 
 template<class Flash, class Modbus>
-bool Task<Flash, Modbus>::scanning_down ()
+bool Generator<Flash, Modbus>::scanning_down ()
 {  
    pwm.duty_cycle = 100;
 
@@ -240,7 +287,7 @@ bool Task<Flash, Modbus>::scanning_down ()
 }
 
 template<class Flash, class Modbus>
-bool Task<Flash, Modbus>::scanning_up ()
+bool Generator<Flash, Modbus>::scanning_up ()
 {  
    pwm.duty_cycle = 100;
 
@@ -256,9 +303,8 @@ bool Task<Flash, Modbus>::scanning_up ()
 }
 
 template<class Flash, class Modbus>
-bool Task<Flash, Modbus>::is_resonance ()
+bool Generator<Flash, Modbus>::is_resonance ()
 {
-   resonance = current_up > current_down ? resonance_up : resonance_down;
    encoder   = resonance;
    if (timer.event()) {
       if (pwm.frequency >= resonance)
@@ -270,7 +316,7 @@ bool Task<Flash, Modbus>::is_resonance ()
 }
 
 template<class Flash, class Modbus>
-bool Task<Flash, Modbus>::power ()
+bool Generator<Flash, Modbus>::power ()
 {
    if (adc.current > current) {
       current = adc.current;

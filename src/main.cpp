@@ -15,6 +15,7 @@
 #include "adc.h"
 #include "pwm_.h"
 #include "encoder.h"
+#include "tune_up.h"
 
 using TX  = mcu::PA9;
 using RX  = mcu::PA10;
@@ -49,49 +50,26 @@ int main()
       };
       uint8_t  modbus_address = 1;
       uint16_t model_number   = 0;
-      bool mode           = 0;
+      uint16_t work_frequency = 18_kHz;
+      uint16_t resonance      = 0_kHz;
+      uint16_t frequency      = 0_kHz;
+      uint8_t  power          = 100_percent;
+      uint8_t  temperatura    = 65;
+      bool     search         = false;
+      bool     manual         = false;
+      bool     manual_tune    = false;
    } flash;
    
    [[maybe_unused]] auto _ = Flash_updater<
-        mcu::FLASH::Sector::_9
-      , mcu::FLASH::Sector::_10
+        mcu::FLASH::Sector::_8
+      , mcu::FLASH::Sector::_7
    >::make (&flash);
 
+   
    decltype(auto) led_green = Pin::make<LED_green, mcu::PinMode::Output>();
    decltype(auto) led_red   = Pin::make<LED_red, mcu::PinMode::Output>();
 
-   // struct Operation {
-   //    bool manual :1; //Bit 0-1 manual (0), auto(1): 
-   //    uint16_t    :15; //Bits 15:2 res: Reserved, must be kept cleared
-   // };//__attribute__((packed));
-
-   struct In_regs {
-   
-      UART::Settings uart_set;         // 0
-      uint16_t modbus_address;         // 1
-      uint16_t password;               // 2
-      uint16_t factory_number;         // 3
-      uint16_t frequency;              // 4
-      uint16_t power;                  // 5
-      // Operation operation;             // 6
-
-   }__attribute__((packed));
-
-   struct Out_regs {
-
-      uint16_t device_code;            // 0
-      uint16_t factory_number;         // 1
-      UART::Settings uart_set;         // 2
-      uint16_t modbus_address;         // 3
-      uint16_t duty_cycle;             // 4
-      uint16_t frequency;              // 5
-      uint16_t resonanse;              // 6
-      uint16_t current;                // 7
-      uint16_t current_resonance;      // 8
-      uint16_t temperatura;            // 9
-      // Operation operation;             // 10
-
-   };//__attribute__((packed));
+   auto us_on = Button<Enter>();
 
    volatile decltype(auto) modbus = Modbus_slave<In_regs, Out_regs>
                  ::make<mcu::Periph::USART1, TX, RX, RTS>
@@ -106,36 +84,30 @@ int main()
    modbus.arInRegsMax[ADR(uart_set)]= 0b11111111;
    modbus.inRegsMin.modbus_address  = 1;
    modbus.inRegsMax.modbus_address  = 255;
-
-   constexpr auto conversion_on_channel {16};
-   struct ADC_{
-      ADC_average& control = ADC_average::make<mcu::Periph::ADC1>(conversion_on_channel);
-      ADC_channel& current = control.add_channel<mcu::PB0>();
-   };
    
    volatile decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(490);
-   pwm.out_enable();
    volatile decltype(auto) encoder = Encoder::make<mcu::Periph::TIM8, mcu::PC6, mcu::PC7, true>();
-   encoder = 18000;
+
    ADC_ adc;
+
+   using Flash  = decltype(flash);
+   using Modbus = Modbus_slave<In_regs, Out_regs>;
+   Generator <Flash, Modbus> work {adc, pwm, led_green, led_red, state, flash, modbus, encoder};
 
    auto up    = Button<Right>();
    auto down  = Button<Left>();
    auto enter = Button<Enter>();
+   // enter.set_down_callback([&]{flash.factory_number = 10;});
    constexpr auto hd44780_pins = HD44780_pins<RS, RW, E, DB4, DB5, DB6, DB7>{};
    [[maybe_unused]] auto menu = Menu (
       hd44780_pins, up, down, enter
       , flash
       , modbus.outRegs
+      , state
    );
-
    
    while(1){
-      
-      pwm.frequency = encoder;
-      modbus.outRegs.frequency = pwm.frequency ;
-      led_green = true;
-      led_red = true;
-      // __WFI();
+      work();
+      __WFI();
    }
 }

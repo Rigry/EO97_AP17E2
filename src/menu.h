@@ -6,6 +6,7 @@
 #include "set_screen.h"
 #include "screens.h"
 #include "button.h"
+#include "tune_up.h"
 
 template<class Pins, class Flash_data, class Modbus_regs, size_t qty_lines = 4, size_t size_line = 20>
 struct Menu : TickSubscriber {
@@ -16,6 +17,7 @@ struct Menu : TickSubscriber {
    Button_event& enter;
    Flash_data&   flash;
    Modbus_regs&  modbus;
+   Mode&         mode;
 
    Screen* current_screen {&main_screen};
    size_t tick_count{0};
@@ -36,8 +38,9 @@ struct Menu : TickSubscriber {
       , Button_event& enter
       , Flash_data&   flash
       , Modbus_regs&  modbus
+      , Mode&         mode
    ) : up{up}, down{down}, enter{enter}
-      , flash{flash}, modbus{modbus}
+      , flash{flash}, modbus{modbus}, mode{mode}
    {
       tick_subscribe();
       current_screen->init();
@@ -45,66 +48,152 @@ struct Menu : TickSubscriber {
    }
 
    Main_screen main_screen {
-          lcd
-        , Enter_event  { [this](auto c){enter.set_click_callback(c);}}
+          lcd, buttons_events
+      //   , Enter_event  { [this](auto c){enter.set_click_callback(c);}}
         , Out_callback { [this]{ change_screen(main_select); }}
         , modbus.temperatura
+        , modbus.duty_cycle
         , modbus.frequency
         , modbus.current
-        , flash.mode
+        , flash.manual
+        , mode.on
    };
 
     Select_screen<4> main_select {
           lcd, buttons_events
         , Out_callback       { [this]{change_screen(main_screen);  }}
-        , Line {"Режим работы",[this]{change_screen(mode_set);     }}
+        , Line {"Режим работы",[this]{ if (flash.search == true)
+                                          change_screen(end_manual_tune);
+                                       else 
+                                          change_screen(mode_set); }}
+        , Line {"Параметры"   ,[this]{change_screen(option_select);}}
         , Line {"Аварии"      ,[this]{change_screen(alarm_select); }}
-        , Line {"Наработка"   ,[this]{change_screen(work_select);  }}
         , Line {"Конфигурация",[this]{change_screen(config_select);}}
    };
 
-   // Select_screen<2> mode_select {
-   //        lcd, buttons_events
-   //      , Out_callback    { [this]{ change_screen(main_select);  }}
-   //      , Line {"Автоматический",[]{}}
-   //      , Line {"Ручной"        ,[]{}}
-   // };
+   Select_screen<3> option_select {
+          lcd, buttons_events
+        , Out_callback    {       [this]{ change_screen(main_select);    }}
+        , Line {"Mощность"       ,[this]{ change_screen(duty_cycle_set); }}
+        , Line {"Рабочая частота",[this]{ change_screen(frequency_set);  }}
+        , Line {"Температура"    ,[this]{ change_screen(temp_select);    }}
+   };
+
+   uint8_t mode_ {flash.manual};
+   Set_screen<uint8_t, mode_to_string> mode_set {
+        lcd, buttons_events
+      , "Выбор режима"
+      , ""
+      , mode_
+      , Min<uint8_t>{0}, Max<uint8_t>{::mode.size() - 1}
+      , Out_callback    { [this]{ change_screen(main_select); }}
+      , Enter_callback  { [this]{ 
+         flash.manual = mode_;
+            if (mode_ == 0)
+               change_screen(tune_select);
+            else {
+               flash.search = true;
+               change_screen(main_select);
+            }
+      }}
+   };
+   
+   uint8_t power{flash.power};
+   Set_screen<uint8_t> duty_cycle_set {
+        lcd, buttons_events
+      , "Мощность от ном."
+      , " %"
+      , power
+      , Min<uint8_t>{0_percent}, Max<uint8_t>{100_percent}
+      , Out_callback    { [this]{ change_screen(option_select); }}
+      , Enter_callback  { [this]{ 
+         flash.power = power;
+            change_screen(option_select); }}
+   };
+
+   uint16_t work_frequency{flash.work_frequency};
+   Set_screen<uint16_t> frequency_set {
+        lcd, buttons_events
+      , "Рабочая частота"
+      , " Гц"
+      , work_frequency
+      , Min<uint16_t>{18_kHz}, Max<uint16_t>{45_kHz}
+      , Out_callback    { [this]{ change_screen(option_select); }}
+      , Enter_callback  { [this]{ 
+         flash.work_frequency = work_frequency;
+            change_screen(option_select); }}
+   };
+
+   Select_screen<2> temp_select {
+          lcd, buttons_events
+        , Out_callback    {      [this]{ change_screen(main_select);     }}
+        , Line {"Текущая"       ,[this]{ change_screen(temp_show);  }}
+        , Line {"Максимальная"  ,[this]{ change_screen(temp_set);;  }}
+   };
+
+   Temp_show_screen temp_show {
+        lcd, buttons_events
+      , Out_callback  { [this]{ change_screen(temp_select); }}
+      , "Текущая темпер."
+      , " С"
+      , modbus.temperatura
+   };
+   
+   uint8_t temperatura{flash.temperatura};
+   Set_screen<uint8_t> temp_set {
+        lcd, buttons_events
+      , "Температ. откл."
+      , " С"
+      , temperatura
+      , Min<uint8_t>{0}, Max<uint8_t>{100}
+      , Out_callback    { [this]{ change_screen(temp_select); }}
+      , Enter_callback  { [this]{ 
+         flash.temperatura = temperatura;
+            change_screen(temp_select); }}
+   };
+
+   uint8_t tune_{flash.manual_tune};
+   Set_screen<uint8_t,tune_to_string> tune_select {
+        lcd, buttons_events
+      , "Настройка"
+      , ""
+      , tune_
+      , Min<uint8_t>{0}, Max<uint8_t>{::tune.size() - 1}
+      , Out_callback    { [this]{ change_screen(mode_set); }}
+      , Enter_callback  { [this]{ 
+         flash.manual_tune = tune_;
+         flash.search = true;
+            change_screen(main_select); }}
+   };
+
+   uint8_t search_ {flash.search};
+   Set_screen<uint8_t, search_to_string> end_manual_tune {
+        lcd, buttons_events
+      , "Закончить нас-ку"
+      , ""
+      , search_
+      , Min<uint8_t>{0}, Max<uint8_t>{::search.size() - 1}
+      , Out_callback    { [this]{ change_screen(main_select); }}
+      , Enter_callback  { [this]{ 
+         flash.search = search_;
+            change_screen(main_select);
+      }}
+   };
 
    Select_screen<3> alarm_select {
           lcd, buttons_events
         , Out_callback    { [this]{ change_screen(main_select);  }}
-        , Line {"Ошибки работы",[]{}}
-        , Line {"Ошибки RS485" ,[]{}}
-        , Line {"Сброс ошибок" ,[]{}}
+        , Line {"Раздел в",[]{}}
+        , Line {"разработке" ,[]{}}
+
    };
 
-   Select_screen<2> work_select {
-          lcd, buttons_events
-        , Out_callback             { [this]{ change_screen(main_select);  }}
-        , Line {"Наработка",[]{}}
-        , Line {"Сброс наработки   ",[]{}}
-   };
-
-   Select_screen<3> config_select {
+   Select_screen<2> config_select {
           lcd, buttons_events
         , Out_callback             { [this]{change_screen(main_select);     }}
         , Line {"Девиация" ,[]{}}
         , Line {"Booster" ,[]{}}
-        , Line {"Дегазация" ,[]{}}
    };
-
-   uint8_t mode_ {flash.uart_set.parity_enable};
-   Set_screen<uint8_t, mode_to_string> mode_set {
-        lcd, buttons_events
-      , "Выбор режима"
-      , mode_
-      , Min<uint8_t>{0}, Max<uint8_t>{mode.size() - 1}
-      , Out_callback    { [this]{ change_screen(main_select); }}
-      , Enter_callback  { [this]{ 
-         flash.mode = bool(mode_);
-            change_screen(main_select);
-      }}
-    };
 
    void notify() override {
       every_qty_cnt_call(tick_count, 50, [this]{
