@@ -6,7 +6,8 @@
 #include "set_screen.h"
 #include "screens.h"
 #include "button.h"
-#include "tune_up.h"
+// #include "tune_up.h"
+#include "generator.h"
 
 template<class Pins, class Flash_data, class Modbus_regs, size_t qty_lines = 4, size_t size_line = 20>
 struct Menu : TickSubscriber {
@@ -55,20 +56,22 @@ struct Menu : TickSubscriber {
         , modbus.duty_cycle
         , modbus.frequency
         , modbus.current
-        , flash.manual
+        , flash.m_control
+        , flash.m_search
         , mode.on
    };
 
-    Select_screen<4> main_select {
+    Select_screen<5> main_select {
           lcd, buttons_events
-        , Out_callback       { [this]{change_screen(main_screen);  }}
-        , Line {"Режим работы",[this]{ if (flash.search == true)
-                                          change_screen(end_manual_tune);
-                                       else 
-                                          change_screen(mode_set); }}
-        , Line {"Параметры"   ,[this]{change_screen(option_select);}}
-        , Line {"Аварии"      ,[this]{change_screen(alarm_select); }}
-        , Line {"Конфигурация",[this]{change_screen(config_select);}}
+        , Out_callback          { [this]{change_screen(main_screen);  }}
+        , Line {"Параметры"      ,[this]{change_screen(option_select);}}
+        , Line {"Настройка"      ,[this]{ if (flash.search)
+                                             change_screen(select_tune_end);
+                                          else
+                                             change_screen(select_tune_begin);  }}
+        , Line {"Режим работы"   ,[this]{change_screen(mode_set);     }}
+        , Line {"Конфигурация"   ,[this]{change_screen(config_select);}}
+        , Line {"Аварии"         ,[this]{change_screen(alarm_select); }}
    };
 
    Select_screen<3> option_select {
@@ -79,7 +82,7 @@ struct Menu : TickSubscriber {
         , Line {"Температура"    ,[this]{ change_screen(temp_select);    }}
    };
 
-   uint8_t mode_ {flash.manual};
+   uint8_t mode_ {flash.m_control};
    Set_screen<uint8_t, mode_to_string> mode_set {
         lcd, buttons_events
       , "Выбор режима"
@@ -88,13 +91,44 @@ struct Menu : TickSubscriber {
       , Min<uint8_t>{0}, Max<uint8_t>{::mode.size() - 1}
       , Out_callback    { [this]{ change_screen(main_select); }}
       , Enter_callback  { [this]{ 
-         flash.manual = mode_;
-            if (mode_ == 0)
-               change_screen(tune_select);
-            else {
-               flash.search = true;
-               change_screen(main_select);
-            }
+         flash.m_control = mode_;
+            change_screen(main_select);
+      }}
+   };
+
+   Select_screen<2> select_tune_begin {
+          lcd, buttons_events
+        , Out_callback    {        [this]{ change_screen(main_select);    }}
+        , Line {"Режим настройки" ,[this]{ change_screen(tune_set);       }}
+        , Line {"Начать"          ,[this]{ flash.search = true;
+                                           change_screen(main_screen);    }}
+   };
+
+   Select_screen<2> select_tune_end {
+          lcd, buttons_events
+        , Out_callback    {        [this]{ change_screen(main_select);    }}
+        , Line {"Режим настройки" ,[this]{ change_screen(tune_set);       }}
+        , Line {"Закончить"       ,[this]{ flash.search = false;
+                                           change_screen(main_screen);    }}
+   };
+   
+   uint8_t tune_ {flash.m_search};
+   Set_screen<uint8_t, tune_to_string> tune_set {
+        lcd, buttons_events
+      , "Настройка"
+      , ""
+      , tune_
+      , Min<uint8_t>{0}, Max<uint8_t>{::tune.size() - 1}
+      , Out_callback    { [this]{ if (flash.search)
+                                    change_screen(select_tune_end);
+                                  else
+                                    change_screen(select_tune_begin); }}
+      , Enter_callback  { [this]{ 
+         flash.m_search = tune_;
+            if (flash.search)
+               change_screen(select_tune_end);
+            else
+               change_screen(select_tune_begin);
       }}
    };
    
@@ -152,33 +186,33 @@ struct Menu : TickSubscriber {
             change_screen(temp_select); }}
    };
 
-   uint8_t tune_{flash.manual_tune};
-   Set_screen<uint8_t,tune_to_string> tune_select {
-        lcd, buttons_events
-      , "Настройка"
-      , ""
-      , tune_
-      , Min<uint8_t>{0}, Max<uint8_t>{::tune.size() - 1}
-      , Out_callback    { [this]{ change_screen(mode_set); }}
-      , Enter_callback  { [this]{ 
-         flash.manual_tune = tune_;
-         flash.search = true;
-            change_screen(main_select); }}
-   };
+   // uint8_t tune_{flash.m_search};
+   // Set_screen<uint8_t,tune_to_string> tune_select {
+   //      lcd, buttons_events
+   //    , "Настройка"
+   //    , ""
+   //    , tune_
+   //    , Min<uint8_t>{0}, Max<uint8_t>{::tune.size() - 1}
+   //    , Out_callback    { [this]{ change_screen(mode_set); }}
+   //    , Enter_callback  { [this]{ 
+   //       flash.m_search = tune_;
+   //       flash.m_search = true;
+   //          change_screen(main_select); }}
+   // };
 
-   uint8_t search_ {flash.search};
-   Set_screen<uint8_t, search_to_string> end_manual_tune {
-        lcd, buttons_events
-      , "Закончить нас-ку"
-      , ""
-      , search_
-      , Min<uint8_t>{0}, Max<uint8_t>{::search.size() - 1}
-      , Out_callback    { [this]{ change_screen(main_select); }}
-      , Enter_callback  { [this]{ 
-         flash.search = search_;
-            change_screen(main_select);
-      }}
-   };
+   // uint8_t search_ {flash.search};
+   // Set_screen<uint8_t, search_to_string> end_tune {
+   //      lcd, buttons_events
+   //    , "Закончить нас-ку"
+   //    , ""
+   //    , search_
+   //    , Min<uint8_t>{0}, Max<uint8_t>{::search.size() - 1}
+   //    , Out_callback    { [this]{ change_screen(main_select); }}
+   //    , Enter_callback  { [this]{ 
+   //       flash.search = search_;
+   //          change_screen(main_select);
+   //    }}
+   // };
 
    Select_screen<3> alarm_select {
           lcd, buttons_events

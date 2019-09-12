@@ -15,7 +15,8 @@
 #include "adc.h"
 #include "pwm_.h"
 #include "encoder.h"
-#include "tune_up.h"
+// #include "tune_up.h"
+#include "generator.h"
 
 using TX  = mcu::PA9;
 using RX  = mcu::PA10;
@@ -51,18 +52,19 @@ int main()
       uint8_t  modbus_address = 1;
       uint16_t model_number   = 0;
       uint16_t work_frequency = 18_kHz;
-      uint16_t resonance      = 0_kHz;
-      uint16_t frequency      = 0_kHz;
+      uint16_t current        = 0;
+      uint16_t m_resonance    = 1_kHz;
+      uint16_t a_resonance    = 1_kHz;
       uint8_t  power          = 100_percent;
       uint8_t  temperatura    = 65;
-      bool     search         = false;
-      bool     manual         = false;
-      bool     manual_tune    = false;
+      bool     m_search       = false;
+      bool     m_control      = false;
+      bool     search         = true;
    } flash;
    
    [[maybe_unused]] auto _ = Flash_updater<
-        mcu::FLASH::Sector::_8
-      , mcu::FLASH::Sector::_7
+        mcu::FLASH::Sector::_9
+      , mcu::FLASH::Sector::_8
    >::make (&flash);
 
    
@@ -92,6 +94,7 @@ int main()
 
    using Flash  = decltype(flash);
    using Modbus = Modbus_slave<In_regs, Out_regs>;
+
    Generator <Flash, Modbus> work {adc, pwm, led_green, led_red, state, flash, modbus, encoder};
 
    auto up    = Button<Right>();

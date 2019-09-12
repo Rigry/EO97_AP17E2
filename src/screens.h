@@ -4,9 +4,18 @@
 #include <array>
 #include <bitset>
 
+constexpr auto info = std::array {
+    "А",
+    "П"  
+};
+
+constexpr std::string_view info_to_string(int i) {
+    return info[i];
+}
+
 constexpr auto mode = std::array {
-    "  авто",
-    "ручной"  
+    "Автоматический",
+    "Пользовательский"  
 };
 
 constexpr std::string_view mode_to_string(int i) {
@@ -14,12 +23,21 @@ constexpr std::string_view mode_to_string(int i) {
 }
 
 constexpr auto tune = std::array {
-    "автоматическая",
-    "пользовательская"  
+    "Автоматическая",
+    "Пользовательская"  
 };
 
 constexpr std::string_view tune_to_string(int i) {
     return tune[i];
+}
+
+constexpr auto tune_control = std::array {
+    "Начать",
+    "Закончить"  
+};
+
+constexpr std::string_view tune_control_to_string(int i) {
+    return tune_control[i];
 }
 
 constexpr auto search = std::array {
@@ -42,6 +60,7 @@ struct Main_screen : Screen {
    uint16_t& frequency;
    uint16_t& current;
    bool& mode;
+   bool& tune;
    bool& on;
 
    Main_screen(
@@ -54,6 +73,7 @@ struct Main_screen : Screen {
       , uint16_t& frequency
       , uint16_t& current
       , bool& mode
+      , bool& tune
       , bool& on
       
    ) : lcd          {lcd}
@@ -65,6 +85,7 @@ struct Main_screen : Screen {
      , frequency    {frequency}
      , current      {current}
      , mode         {mode}
+     , tune         {tune}
      , on           {on}
    {}
 
@@ -78,7 +99,9 @@ struct Main_screen : Screen {
       lcd.line(0) << "F=";
       lcd.line(0).cursor(11) << "P=";
       lcd.line(1) << "I=";
-      lcd.line(1).cursor(10) << ::mode[this->mode];
+      lcd.line(1).cursor(10).width(2) << temperatura << "C";;
+      lcd.line(1).cursor(14) << ::info[this->tune];
+      lcd.line(1).cursor(15) << ::info[this->mode];
    }
 
    void deinit() override {
@@ -92,6 +115,7 @@ struct Main_screen : Screen {
       lcd.line(0).cursor(2).div_1000(frequency) << "кГц";
       lcd.line(0).cursor(13).width(2) << (duty_cycle / 5) << '%';
       lcd.line(1).cursor(2).div_1000(current) << "А";
+      lcd.line(1).cursor(10).width(2) << temperatura << "C";
       // lcd.line(1).cursor(8) << duty_cycle << "%";
    }
 
@@ -144,3 +168,4 @@ private:
       lcd << clear_after;
    }
 };
+
