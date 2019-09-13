@@ -9,20 +9,28 @@
 #include "modbus_slave.h"
 #include "literals.h"
 #include "search.h"
+#include "NTC_table.h"
 
 
 constexpr auto conversion_on_channel {16};
-struct ADC_{
+struct ADC_1{
    ADC_average& control     = ADC_average::make<mcu::Periph::ADC1>(conversion_on_channel);
+   ADC_channel& temperatura = control.add_channel<mcu::PA2>(); 
    ADC_channel& current     = control.add_channel<mcu::PB0>();
-   // ADC_channel& temperatura = control.add_channel<mcu::PA2>(); 
+   
 };
+
+// struct ADC_2{
+//    ADC_average& control     = ADC_average::make<mcu::Periph::ADC2>(conversion_on_channel);
+//    ADC_channel& temperatura = control.add_channel<mcu::PA2>(); 
+// };
 
 struct Mode {
    bool on          {false};
    bool search      {false};
    bool manual      {false};
    bool manual_tune {false};
+   bool overheat    {false};
 } state;
 
 struct Operation {
@@ -70,7 +78,8 @@ class Generator
    enum State {wait_, auto_search, manual_search, auto_control, manual_control, set_power, emergency} state{State::wait_}; 
    enum State_scan {wait, pause, scan_down, scan_up, set_resonance} state_scan{State_scan::wait};
    
-   ADC_& adc;
+   ADC_1& adc_current;
+   // ADC_2& adc_temp;
    PWM& pwm;
    Pin& led_green;
    Pin& led_red;
@@ -82,6 +91,7 @@ class Generator
    Timer timer{100_ms};
    Timer on_power{1000_ms};
    Timer delay {};
+   uint16_t temperatura{0};
    uint16_t current{0};
    uint16_t current_up{0};
    uint16_t current_down{0};
@@ -95,6 +105,7 @@ class Generator
    uint16_t duty_cycle {200};
    int16_t  step {10_Hz};
    bool search{false};
+   bool overheat{false};
    bool power();
    bool scanning();
    void select_mode();
@@ -103,15 +114,30 @@ class Generator
    bool is_resonance();
 
    uint16_t milliamper(uint16_t adc) { return adc * 3.3 * 0.125 / (16 * 4095) * 1000;} // 0.125 коэффициент для пересчета, 1000 - для передачи в мА
-
-   // constexpr size_t U = 33;
-   // constexpr size_t R = 5100;
+   void temp(uint16_t adc) {
+      
+      // auto p = std::lower_bound(
+      //     std::begin(NTC::u2904<33,5100>),
+      //     std::end(NTC::u2904<33,5100>),
+      //     adc,
+      //     std::greater<uint32_t>());
+      // temp = (p - NTC::u2904<33,5100>);
+      // return temp;
+      adc = adc / 16;
+      for (size_t i = 0; i <= std::size(NTC::u2904<33,5100>) - 2; i++) {
+         if (adc < NTC::u2904<33,5100>[i] and adc > NTC::u2904<33,5100>[i + 1])
+         temperatura = i;
+      }
+   }
+   size_t U = 33;
+   size_t R = 5100;
 
 public:
    
-   Generator(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Mode& mode
+   Generator(ADC_1& adc_current, PWM& pwm, Pin& led_green, Pin& led_red, Mode& mode
            , Flash_data& flash, Modbus& modbus, Encoder& encoder) 
-      : adc {adc}
+      : adc_current {adc_current}
+      // , adc_temp {adc_temp}
       , pwm {pwm}
       , led_green {led_green}
       , led_red {led_red}
@@ -123,24 +149,39 @@ public:
       // adc.control.set_callback ([&]{
       //    pwm.duty_cycle += adc.power > modbus.inRegs.power ? -1 : 1;
       // });
-      adc.control.start();
+      // adc.control.set_callback ([&]{
+      //    adc.temperatura = adc.temperatura / 16;
+      //    for (size_t i = 0; i <= std::size(NTC::u2904<33,5100>) - 2; i++) {
+      //       if (adc.temperatura < NTC::u2904<33,5100>[i] and adc.temperatura > NTC::u2904<33,5100>[i + 1])
+      //       temperatura = i;
+      //    }
+      
+      // // led_red = adc.temperature < t;
+      // });
+      adc_current.control.start();
+      // adc_temp.control.start();
    }
 
    void operator()() {
       
-      (mode.on and flash.m_resonance) or (mode.on and search) ? pwm.out_enable() : pwm.out_disable(); // вкл по кнопке энкодера
+      if (overheat |= temperatura > flash.temperatura)
+            mode.overheat = overheat  = temperatura > flash.recovery;
+      
+      mode.on and (flash.m_resonance or search) and not overheat ? pwm.out_enable() : pwm.out_disable(); // вкл по кнопке энкодера
 
-      mode.on = pwm ? mode.on : false;
+      mode.on = pwm or overheat ? mode.on : false;
       
       led_red   = search = flash.search; // индикация нужен поиск, погаснет, когда поиск закончится
       led_green = pwm;    // индикация работы генератора
       
+      temp(adc_current.temperatura);
+
       modbus.outRegs.frequency               = pwm.frequency;
       // modbus.outRegs.frequency               = pwm.frequency;
       // flash.m_resonance                        = 
       // modbus.outRegs.m_resonance             = resonance;
-      modbus.outRegs.current                 = milliamper(adc.current);
-      // modbus.outRegs.temperatura             = adc.
+      modbus.outRegs.current                 = milliamper(adc_current.current);
+      modbus.outRegs.temperatura             = temperatura;
       // modbus.outRegs.current_resonance       = milliamper(current);
       modbus.outRegs.duty_cycle              = pwm.duty_cycle;
       // modbus.outRegs.operation.on            = mode.on;
@@ -311,8 +352,8 @@ bool Generator<Flash, Modbus>::scanning_down ()
 {  
    pwm.duty_cycle = 100;
 
-   if (adc.current > current_down) {
-      current_down = adc.current;
+   if (adc_current.current > current_down) {
+      current_down = adc_current.current;
       resonance_down = pwm.frequency;
    }
    
@@ -327,8 +368,8 @@ bool Generator<Flash, Modbus>::scanning_up ()
 {  
    pwm.duty_cycle = 100;
 
-   if (adc.current > current_up) {
-      current_up = adc.current;
+   if (adc_current.current > current_up) {
+      current_up = adc_current.current;
       resonance_up = pwm.frequency;
    }
    
@@ -353,8 +394,8 @@ bool Generator<Flash, Modbus>::is_resonance ()
 template<class Flash, class Modbus>
 bool Generator<Flash, Modbus>::power ()
 {
-   if (adc.current > current) {
-      flash.current = current = adc.current;
+   if (adc_current.current > current) {
+      flash.current = current = adc_current.current;
    }
    if (on_power.event())   
       pwm.duty_cycle += pwm.duty_cycle < duty_cycle ? 1 : -1;

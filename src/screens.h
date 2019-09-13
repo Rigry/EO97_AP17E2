@@ -59,6 +59,7 @@ struct Main_screen : Screen {
    uint16_t& duty_cycle;
    uint16_t& frequency;
    uint16_t& current;
+   bool& overheat;
    bool& mode;
    bool& tune;
    bool& on;
@@ -72,6 +73,7 @@ struct Main_screen : Screen {
       , uint16_t& duty_cycle
       , uint16_t& frequency
       , uint16_t& current
+      , bool& overheat
       , bool& mode
       , bool& tune
       , bool& on
@@ -84,6 +86,7 @@ struct Main_screen : Screen {
      , duty_cycle   {duty_cycle}
      , frequency    {frequency}
      , current      {current}
+     , overheat     {overheat}
      , mode         {mode}
      , tune         {tune}
      , on           {on}
@@ -114,7 +117,11 @@ struct Main_screen : Screen {
    void draw() override {
       lcd.line(0).cursor(2).div_1000(frequency) << "кГц";
       lcd.line(0).cursor(13).width(2) << (duty_cycle / 5) << '%';
-      lcd.line(1).cursor(2).div_1000(current) << "А";
+      if (overheat) {
+         lcd.line(1) << "ПЕРЕГРЕВ";
+      } else {
+        lcd.line(1) << "I="; lcd.line(1).cursor(2).div_1000(current) << "А";
+      }
       lcd.line(1).cursor(10).width(2) << temperatura << "C";
       // lcd.line(1).cursor(8) << duty_cycle << "%";
    }

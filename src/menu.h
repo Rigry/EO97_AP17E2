@@ -56,6 +56,7 @@ struct Menu : TickSubscriber {
         , modbus.duty_cycle
         , modbus.frequency
         , modbus.current
+        , mode.overheat
         , flash.m_control
         , flash.m_search
         , mode.on
@@ -158,11 +159,12 @@ struct Menu : TickSubscriber {
             change_screen(option_select); }}
    };
 
-   Select_screen<2> temp_select {
+   Select_screen<3> temp_select {
           lcd, buttons_events
         , Out_callback    {      [this]{ change_screen(main_select);     }}
         , Line {"Текущая"       ,[this]{ change_screen(temp_show);  }}
         , Line {"Максимальная"  ,[this]{ change_screen(temp_set);;  }}
+        , Line {"Восстановления",[this]{ change_screen(temp_recow);;  }}
    };
 
    Temp_show_screen temp_show {
@@ -183,6 +185,19 @@ struct Menu : TickSubscriber {
       , Out_callback    { [this]{ change_screen(temp_select); }}
       , Enter_callback  { [this]{ 
          flash.temperatura = temperatura;
+            change_screen(temp_select); }}
+   };
+
+   uint8_t recovery{flash.recovery};
+   Set_screen<uint8_t> temp_recow {
+        lcd, buttons_events
+      , "Температ. вкл."
+      , " С"
+      , recovery
+      , Min<uint8_t>{0}, Max<uint8_t>{100}
+      , Out_callback    { [this]{ change_screen(temp_select); }}
+      , Enter_callback  { [this]{ 
+         flash.recovery = recovery;
             change_screen(temp_select); }}
    };
 

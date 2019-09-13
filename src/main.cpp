@@ -57,6 +57,7 @@ int main()
       uint16_t a_resonance    = 1_kHz;
       uint8_t  power          = 100_percent;
       uint8_t  temperatura    = 65;
+      uint8_t  recovery       = 45;
       bool     m_search       = false;
       bool     m_control      = false;
       bool     search         = true;
@@ -90,12 +91,13 @@ int main()
    volatile decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(490);
    volatile decltype(auto) encoder = Encoder::make<mcu::Periph::TIM8, mcu::PC6, mcu::PC7, true>();
 
-   ADC_ adc;
+   ADC_1 adc_current;
+   // ADC_2 adc_temp;
 
    using Flash  = decltype(flash);
    using Modbus = Modbus_slave<In_regs, Out_regs>;
 
-   Generator <Flash, Modbus> work {adc, pwm, led_green, led_red, state, flash, modbus, encoder};
+   Generator <Flash, Modbus> work {adc_current, pwm, led_green, led_red, state, flash, modbus, encoder};
 
    auto up    = Button<Right>();
    auto down  = Button<Left>();
