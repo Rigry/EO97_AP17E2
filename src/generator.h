@@ -113,21 +113,21 @@ class Generator
    bool scanning_down ();
    bool is_resonance();
 
-   uint16_t milliamper(uint16_t adc) { return adc * 3.3 * 0.125 / (16 * 4095) * 1000;} // 0.125 коэффициент для пересчета, 1000 - для передачи в мА
+   uint16_t milliamper(uint16_t adc) { return adc * 3.3 * 0.125 / (conversion_on_channel * 4095) * 1000;} // 0.125 коэффициент для пересчета, 1000 - для передачи в мА
    void temp(uint16_t adc) {
-      
-      // auto p = std::lower_bound(
-      //     std::begin(NTC::u2904<33,5100>),
-      //     std::end(NTC::u2904<33,5100>),
-      //     adc,
-      //     std::greater<uint32_t>());
-      // temp = (p - NTC::u2904<33,5100>);
+      adc = adc / conversion_on_channel;
+      auto p = std::lower_bound(
+          std::begin(NTC::u2904<33,5100>),
+          std::end(NTC::u2904<33,5100>),
+          adc,
+          std::greater<uint32_t>());
+      temperatura = (p - NTC::u2904<33,5100>);
       // return temp;
-      adc = adc / 16;
-      for (size_t i = 0; i <= std::size(NTC::u2904<33,5100>) - 2; i++) {
-         if (adc < NTC::u2904<33,5100>[i] and adc > NTC::u2904<33,5100>[i + 1])
-         temperatura = i;
-      }
+      // adc = adc / 16;
+      // for (size_t i = 0; i <= std::size(NTC::u2904<33,5100>) - 2; i++) {
+      //    if (adc < NTC::u2904<33,5100>[i] and adc > NTC::u2904<33,5100>[i + 1])
+      //    temperatura = i;
+      // }
    }
    size_t U = 33;
    size_t R = 5100;
