@@ -14,7 +14,6 @@
 #include "modbus_slave.h"
 #include "adc.h"
 #include "pwm_.h"
-#include "encoder.h"
 // #include "tune_up.h"
 #include "generator.h"
 
@@ -72,7 +71,7 @@ int main()
    decltype(auto) led_green = Pin::make<LED_green, mcu::PinMode::Output>();
    decltype(auto) led_red   = Pin::make<LED_red, mcu::PinMode::Output>();
 
-   auto us_on = Button<Enter>();
+   // auto us_on = Button<Enter>();
 
    volatile decltype(auto) modbus = Modbus_slave<In_regs, Out_regs>
                  ::make<mcu::Periph::USART1, TX, RX, RTS>
@@ -91,13 +90,12 @@ int main()
    volatile decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(490);
    volatile decltype(auto) encoder = Encoder::make<mcu::Periph::TIM8, mcu::PC6, mcu::PC7, true>();
 
-   ADC_1 adc_current;
-   // ADC_2 adc_temp;
+   ADC_ adc_current;
 
    using Flash  = decltype(flash);
    using Modbus = Modbus_slave<In_regs, Out_regs>;
 
-   Generator <Flash, Modbus> work {adc_current, pwm, led_green, led_red, state, flash, modbus, encoder};
+   Generator <Flash, Modbus> work {adc_current, pwm, led_green, led_red, state, flash, modbus};
 
    auto up    = Button<Right>();
    auto down  = Button<Left>();
@@ -105,10 +103,11 @@ int main()
    // enter.set_down_callback([&]{flash.factory_number = 10;});
    constexpr auto hd44780_pins = HD44780_pins<RS, RW, E, DB4, DB5, DB6, DB7>{};
    [[maybe_unused]] auto menu = Menu (
-      hd44780_pins, up, down, enter
+      hd44780_pins, encoder, up, down, enter
       , flash
       , modbus.outRegs
       , state
+      , pwm
    );
    
    while(1){

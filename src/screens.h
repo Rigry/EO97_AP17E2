@@ -3,6 +3,7 @@
 #include "screen_common.h"
 #include <array>
 #include <bitset>
+#include "pwm_.h"
 
 constexpr auto info = std::array {
     "А",
@@ -52,7 +53,6 @@ constexpr std::string_view search_to_string(int i) {
 // template <class function>
 struct Main_screen : Screen {
    String_buffer& lcd;
-   // Eventer enter_event;
    Buttons_events eventers;
    Callback<> out_callback;
    uint16_t& temperatura;
@@ -60,9 +60,12 @@ struct Main_screen : Screen {
    uint16_t& frequency;
    uint16_t& current;
    bool& overheat;
+   bool& search;
    bool& mode;
    bool& tune;
    bool& on;
+
+   PWM& pwm;
 
    Main_screen(
       String_buffer& lcd
@@ -74,9 +77,11 @@ struct Main_screen : Screen {
       , uint16_t& frequency
       , uint16_t& current
       , bool& overheat
+      , bool& search
       , bool& mode
       , bool& tune
       , bool& on
+      , PWM& pwm
       
    ) : lcd          {lcd}
    //   , enter_event  {enter_event.value}
@@ -87,28 +92,29 @@ struct Main_screen : Screen {
      , frequency    {frequency}
      , current      {current}
      , overheat     {overheat}
+     , search       {search}
      , mode         {mode}
      , tune         {tune}
      , on           {on}
+     , pwm          {pwm}
    {}
 
    void init() override {
-      // enter_event ([this]{ out_callback(); });
       eventers.enter ([this]{ on ^= 1;});
-      eventers.up    ([this]{ ;  });
-      eventers.down  ([this]{ ;  });
+      eventers.up    ([this]{ pwm.frequency += (tune and search) or mode ?  10 : 0;});
+      eventers.down  ([this]{ pwm.frequency += (tune and search) or mode ? -10 : 0;});
       eventers.out   ([this]{ out_callback(); });
       lcd.clear();
       lcd.line(0) << "F=";
       lcd.line(0).cursor(11) << "P=";
       lcd.line(1) << "I=";
-      lcd.line(1).cursor(10).width(2) << temperatura << "C";;
+      lcd.line(1).cursor(10).width(2) << temperatura << "C";
       lcd.line(1).cursor(14) << ::info[this->tune];
       lcd.line(1).cursor(15) << ::info[this->mode];
    }
 
    void deinit() override {
-      // enter_event (nullptr);
+      eventers.enter (nullptr);
       eventers.up    (nullptr);
       eventers.down  (nullptr);
       eventers.out   (nullptr);
@@ -123,7 +129,6 @@ struct Main_screen : Screen {
         lcd.line(1) << "I="; lcd.line(1).cursor(2).div_1000(current) << "А";
       }
       lcd.line(1).cursor(10).width(2) << temperatura << "C";
-      // lcd.line(1).cursor(8) << duty_cycle << "%";
    }
 
 };

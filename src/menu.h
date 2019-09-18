@@ -7,25 +7,28 @@
 #include "screens.h"
 #include "button.h"
 // #include "tune_up.h"
+#include "encoder_rotary.h"
 #include "generator.h"
 
 template<class Pins, class Flash_data, class Modbus_regs, size_t qty_lines = 4, size_t size_line = 20>
 struct Menu : TickSubscriber {
    String_buffer lcd {};
    HD44780& hd44780 {HD44780::make(Pins{}, lcd.get_buffer())};
+   Encoder& encoder;
    Button_event& up;
    Button_event& down;
    Button_event& enter;
    Flash_data&   flash;
    Modbus_regs&  modbus;
    Mode&         mode;
+   PWM&          pwm;
 
    Screen* current_screen {&main_screen};
    size_t tick_count{0};
 
    Buttons_events buttons_events {
-        Up_event    {[this](auto c){   up.set_click_callback(c);}}
-      , Down_event  {[this](auto c){ down.set_click_callback(c);}}
+        Up_event    {[this](auto c){encoder.set_plus_callback(c);}}
+      , Down_event  {[this](auto c){encoder.set_minus_callback(c);}}
       , Enter_event {[this](auto c){enter.set_click_callback(c);}}
       , Out_event   {[this](auto c){enter.set_long_push_callback(c);}}
       , Increment_up_event   {[this](auto c){  up.set_increment_callback(c);}}
@@ -34,14 +37,16 @@ struct Menu : TickSubscriber {
 
    Menu (
         Pins pins
+      , Encoder& encoder
       , Button_event& up
       , Button_event& down
       , Button_event& enter
       , Flash_data&   flash
       , Modbus_regs&  modbus
       , Mode&         mode
-   ) : up{up}, down{down}, enter{enter}
-      , flash{flash}, modbus{modbus}, mode{mode}
+      , PWM&          pwm
+   ) : encoder{encoder}, up{up}, down{down}, enter{enter}
+      , flash{flash}, modbus{modbus}, mode{mode}, pwm{pwm}
    {
       tick_subscribe();
       current_screen->init();
@@ -57,9 +62,11 @@ struct Menu : TickSubscriber {
         , modbus.frequency
         , modbus.current
         , mode.overheat
+        , flash.search
         , flash.m_control
         , flash.m_search
         , mode.on
+        , pwm
    };
 
     Select_screen<5> main_select {

@@ -5,25 +5,21 @@
 #include "adc.h"
 #include "flash.h"
 #include "timers.h"
-#include "encoder.h"
+// #include "encoder.h"
 #include "modbus_slave.h"
 #include "literals.h"
-#include "search.h"
+// #include "search.h"
 #include "NTC_table.h"
 
 
+
 constexpr auto conversion_on_channel {16};
-struct ADC_1{
+struct ADC_{
    ADC_average& control     = ADC_average::make<mcu::Periph::ADC1>(conversion_on_channel);
    ADC_channel& temperatura = control.add_channel<mcu::PA2>(); 
    ADC_channel& current     = control.add_channel<mcu::PB0>();
    
 };
-
-// struct ADC_2{
-//    ADC_average& control     = ADC_average::make<mcu::Periph::ADC2>(conversion_on_channel);
-//    ADC_channel& temperatura = control.add_channel<mcu::PA2>(); 
-// };
 
 struct Mode {
    bool on          {false};
@@ -78,15 +74,13 @@ class Generator
    enum State {wait_, auto_search, manual_search, auto_control, manual_control, set_power, emergency} state{State::wait_}; 
    enum State_scan {wait, pause, scan_down, scan_up, set_resonance} state_scan{State_scan::wait};
    
-   ADC_1& adc_current;
-   // ADC_2& adc_temp;
+   ADC_& adc;
    PWM& pwm;
    Pin& led_green;
    Pin& led_red;
    Mode& mode;
    Flash_data& flash;
    Modbus& modbus;
-   Encoder& encoder;
 
    Timer timer{100_ms};
    Timer on_power{1000_ms};
@@ -122,44 +116,23 @@ class Generator
           adc,
           std::greater<uint32_t>());
       temperatura = (p - NTC::u2904<33,5100>);
-      // return temp;
-      // adc = adc / 16;
-      // for (size_t i = 0; i <= std::size(NTC::u2904<33,5100>) - 2; i++) {
-      //    if (adc < NTC::u2904<33,5100>[i] and adc > NTC::u2904<33,5100>[i + 1])
-      //    temperatura = i;
-      // }
    }
    size_t U = 33;
    size_t R = 5100;
 
 public:
    
-   Generator(ADC_1& adc_current, PWM& pwm, Pin& led_green, Pin& led_red, Mode& mode
-           , Flash_data& flash, Modbus& modbus, Encoder& encoder) 
-      : adc_current {adc_current}
-      // , adc_temp {adc_temp}
+   Generator(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Mode& mode
+           , Flash_data& flash, Modbus& modbus) 
+      : adc {adc}
       , pwm {pwm}
       , led_green {led_green}
       , led_red {led_red}
       , mode {mode}
       , flash {flash}
       , modbus {modbus}
-      , encoder {encoder}
    {
-      // adc.control.set_callback ([&]{
-      //    pwm.duty_cycle += adc.power > modbus.inRegs.power ? -1 : 1;
-      // });
-      // adc.control.set_callback ([&]{
-      //    adc.temperatura = adc.temperatura / 16;
-      //    for (size_t i = 0; i <= std::size(NTC::u2904<33,5100>) - 2; i++) {
-      //       if (adc.temperatura < NTC::u2904<33,5100>[i] and adc.temperatura > NTC::u2904<33,5100>[i + 1])
-      //       temperatura = i;
-      //    }
-      
-      // // led_red = adc.temperature < t;
-      // });
-      adc_current.control.start();
-      // adc_temp.control.start();
+      adc.control.start();
    }
 
    void operator()() {
@@ -174,13 +147,13 @@ public:
       led_red   = search = flash.search; // индикация нужен поиск, погаснет, когда поиск закончится
       led_green = pwm;    // индикация работы генератора
       
-      temp(adc_current.temperatura);
+      temp(adc.temperatura);
 
       modbus.outRegs.frequency               = pwm.frequency;
       // modbus.outRegs.frequency               = pwm.frequency;
       // flash.m_resonance                        = 
       // modbus.outRegs.m_resonance             = resonance;
-      modbus.outRegs.current                 = milliamper(adc_current.current);
+      modbus.outRegs.current                 = milliamper(adc.current);
       modbus.outRegs.temperatura             = temperatura;
       // modbus.outRegs.current_resonance       = milliamper(current);
       modbus.outRegs.duty_cycle              = pwm.duty_cycle;
@@ -228,7 +201,7 @@ public:
             if (search) {
                if (flash.m_search) {
                   pwm.duty_cycle = duty_cycle;
-                  pwm.frequency = encoder = work_frequency;
+                  pwm.frequency  = work_frequency;
                   state = State::manual_search;
                } else {
                   current = 0;
@@ -242,9 +215,9 @@ public:
                select_mode();
             } else {
                if (flash.m_search) {
-                  pwm.frequency = encoder = flash.m_resonance;
+                  pwm.frequency = flash.m_resonance;
                } else {
-                  pwm.frequency = encoder = flash.a_resonance;
+                  pwm.frequency = flash.a_resonance;
                }
             }
          break;
@@ -257,7 +230,7 @@ public:
             if (not pwm and not search) state = State::wait_;
          break;
          case manual_search:
-            pwm.frequency = encoder;
+            // pwm.frequency = encoder;
             if (not search) {
                flash.m_resonance = pwm.frequency;
                select_mode();
@@ -271,12 +244,12 @@ public:
          break;
          case auto_control:
             if (pwm) {
-               pwm.frequency = encoder;
+               // pwm.frequency = encoder;
             }
             if (not pwm) state = State::wait_;
          break;
          case manual_control:
-            pwm.frequency = encoder;
+            // pwm.frequency = encoder;
             if (not pwm) state = State::wait_;
          break;
          case emergency:
@@ -297,9 +270,9 @@ void Generator<Flash, Modbus>::select_mode()
    }
 
    if (flash.m_search) {
-      pwm.frequency = encoder = flash.m_resonance;
+      pwm.frequency = flash.m_resonance;
    } else {
-      pwm.frequency = encoder = flash.a_resonance;
+      pwm.frequency = flash.a_resonance;
    }
 
 }
@@ -352,8 +325,8 @@ bool Generator<Flash, Modbus>::scanning_down ()
 {  
    pwm.duty_cycle = 100;
 
-   if (adc_current.current > current_down) {
-      current_down = adc_current.current;
+   if (adc.current > current_down) {
+      current_down = adc.current;
       resonance_down = pwm.frequency;
    }
    
@@ -368,8 +341,8 @@ bool Generator<Flash, Modbus>::scanning_up ()
 {  
    pwm.duty_cycle = 100;
 
-   if (adc_current.current > current_up) {
-      current_up = adc_current.current;
+   if (adc.current > current_up) {
+      current_up = adc.current;
       resonance_up = pwm.frequency;
    }
    
@@ -394,8 +367,8 @@ bool Generator<Flash, Modbus>::is_resonance ()
 template<class Flash, class Modbus>
 bool Generator<Flash, Modbus>::power ()
 {
-   if (adc_current.current > current) {
-      flash.current = current = adc_current.current;
+   if (adc.current > current) {
+      flash.current = current = adc.current;
    }
    if (on_power.event())   
       pwm.duty_cycle += pwm.duty_cycle < duty_cycle ? 1 : -1;
