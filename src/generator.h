@@ -16,7 +16,7 @@
 constexpr auto conversion_on_channel {16};
 struct ADC_{
    ADC_average& control     = ADC_average::make<mcu::Periph::ADC1>(conversion_on_channel);
-   ADC_channel& temperatura = control.add_channel<mcu::PA2>(); 
+   ADC_channel& temperatura = control.add_channel<mcu::PA2>();
    ADC_channel& current     = control.add_channel<mcu::PB0>();
    
 };
@@ -29,59 +29,29 @@ struct Mode {
    bool overheat    {false};
 } state;
 
-struct Operation {
-   bool on            :1; 
-   bool search        :1;
-   bool manual        :1;
-   bool manual_tune   :1;
-   uint16_t           :12; //Bits 11:2 res: Reserved, must be kept cleared
-}__attribute__((packed));
-
-struct In_regs {
-   
-   UART::Settings uart_set;         // 0
-   uint16_t modbus_address;         // 1
-   uint16_t password;               // 2
-   uint16_t factory_number;         // 3
-   uint16_t frequency;              // 4
-   uint16_t power;                  // 5
-   Operation operation;             // 6
-
-}__attribute__((packed));
-
-struct Out_regs {
-
-   uint16_t device_code;            // 0
-   uint16_t factory_number;         // 1
-   UART::Settings uart_set;         // 2
-   uint16_t modbus_address;         // 3
-   uint16_t duty_cycle;             // 4
-   uint16_t frequency;              // 5
-   uint16_t m_resonance;            // 6
-   uint16_t a_resonance;            // 7
-   uint16_t current;                // 8
-   uint16_t current_resonance;      // 9
-   uint16_t temperatura;            // 10
-   Operation operation;             // 11
-
-};//__attribute__((packed));
-
 #define ADR(reg) GET_ADR(In_regs, reg)
 
-template<class Flash_data, class Modbus>
+template<class Flash_data>
 class Generator
 {
+   template<class Modbus, class Generator>
+   friend class Communication;
+   
    enum State {wait_, auto_search, manual_search, auto_control, manual_control, set_power, emergency} state{State::wait_}; 
    enum State_scan {wait, pause, scan_down, scan_up, set_resonance} state_scan{State_scan::wait};
-   
+
    ADC_& adc;
    PWM& pwm;
    Pin& led_green;
    Pin& led_red;
    Mode& mode;
    Flash_data& flash;
-   Modbus& modbus;
 
+   // Timer nots{200_ms};
+   // int i{0};
+   // uint16_t fr[11] = {2960, 3136, 3332, 3440, 3729, 3951, 4186, 4434, 4698, 4978, 5274};
+   // uint16_t fr[29] = {7000, 7800, 7000, 6250, 5290, 5200, 4600, 3500, 4600, 5200, 5900, 6250, 5900, 5200, 7000, 7800, 7000, 6250, 5900, 5200, 4600, 3500, 6250, 5900, 5200, 7000, 5900, 5200, 4600};
+   // uint16_t fr[2] = {7000, 7800};
    Timer timer{100_ms};
    Timer on_power{1000_ms};
    Timer delay {};
@@ -92,6 +62,7 @@ class Generator
    uint16_t resonance{0};
    uint16_t resonance_up{0};
    uint16_t resonance_down{0};
+   uint16_t frequency{0};
    uint16_t range_frequency{ 2_kHz};
    uint16_t work_frequency {18_kHz};
    uint16_t min_frequency  {19_kHz};
@@ -123,14 +94,13 @@ class Generator
 public:
    
    Generator(ADC_& adc, PWM& pwm, Pin& led_green, Pin& led_red, Mode& mode
-           , Flash_data& flash, Modbus& modbus) 
+           , Flash_data& flash) 
       : adc {adc}
       , pwm {pwm}
       , led_green {led_green}
       , led_red {led_red}
       , mode {mode}
       , flash {flash}
-      , modbus {modbus}
    {
       adc.control.start();
    }
@@ -149,51 +119,10 @@ public:
       
       temp(adc.temperatura);
 
-      modbus.outRegs.frequency               = pwm.frequency;
-      // modbus.outRegs.frequency               = pwm.frequency;
-      // flash.m_resonance                        = 
-      // modbus.outRegs.m_resonance             = resonance;
-      modbus.outRegs.current                 = milliamper(adc.current);
-      modbus.outRegs.temperatura             = temperatura;
-      // modbus.outRegs.current_resonance       = milliamper(current);
-      modbus.outRegs.duty_cycle              = pwm.duty_cycle;
-      // modbus.outRegs.operation.on            = mode.on;
-      // modbus.outRegs.operation.search        = flash.m_search;
-      // modbus.outRegs.operation.manual        = flash.m_control;
-      // modbus.outRegs.operation.manual_tune   = flash.m_search;
-
       work_frequency = flash.work_frequency;
       min_frequency  = work_frequency - range_frequency;
       max_frequency  = work_frequency + range_frequency;
       duty_cycle = flash.power * 5;
-      
-      modbus([&](uint16_t registrAddress) {
-            static bool unblock = false;
-         switch (registrAddress) {
-            case ADR(uart_set):
-               flash.uart_set
-                  = modbus.outRegs.uart_set
-                  = modbus.inRegs.uart_set;
-            break;
-            case ADR(modbus_address):
-               flash.modbus_address 
-                  = modbus.outRegs.modbus_address
-                  = modbus.inRegs.modbus_address;
-            break;
-            case ADR(password):
-               unblock = modbus.inRegs.password == 127;
-            break;
-            case ADR(factory_number):
-               if (unblock) {
-                  unblock = false;
-                  flash.factory_number 
-                     = modbus.outRegs.factory_number
-                     = modbus.inRegs.factory_number;
-               }
-               unblock = true;
-            break;
-         } // switch
-      });
       
       switch (state)
       {
@@ -230,9 +159,14 @@ public:
             if (not pwm and not search) state = State::wait_;
          break;
          case manual_search:
-            // pwm.frequency = encoder;
+            // if (nots.event()) {
+            //    pwm.frequency = fr[i++] * 1.5;
+            //    if (i == std::size(fr)) i = 0;
+            // }
+            pwm.frequency = frequency;
             if (not search) {
                flash.m_resonance = pwm.frequency;
+               flash.m_current = current;
                select_mode();
             }
             if (not pwm and not search) state = State::wait_;
@@ -249,7 +183,7 @@ public:
             if (not pwm) state = State::wait_;
          break;
          case manual_control:
-            // pwm.frequency = encoder;
+            pwm.frequency = frequency;
             if (not pwm) state = State::wait_;
          break;
          case emergency:
@@ -258,9 +192,15 @@ public:
    } //void operator()()
 };
 
-template<class Flash, class Modbus>
-void Generator<Flash, Modbus>::select_mode()
+template<class Flash>
+void Generator<Flash>::select_mode()
 {
+   if (flash.m_search) {
+         pwm.frequency = flash.m_resonance;
+      } else {
+         pwm.frequency = flash.a_resonance;
+   }
+      
    if (flash.m_control) {
       pwm.duty_cycle = duty_cycle;
       state = State::manual_control;
@@ -268,17 +208,10 @@ void Generator<Flash, Modbus>::select_mode()
       pwm.duty_cycle = 100;
       state = State::set_power;
    }
-
-   if (flash.m_search) {
-      pwm.frequency = flash.m_resonance;
-   } else {
-      pwm.frequency = flash.a_resonance;
-   }
-
 }
 
-template<class Flash, class Modbus>
-bool Generator<Flash, Modbus>::scanning()
+template<class Flash>
+bool Generator<Flash>::scanning()
 {
    bool tmp{false};
    switch (state_scan){
@@ -312,6 +245,7 @@ bool Generator<Flash, Modbus>::scanning()
       case set_resonance:
          if (is_resonance()) {
             tmp = true;
+            state_scan = State_scan::wait;
          }
       break;
 
@@ -320,8 +254,8 @@ bool Generator<Flash, Modbus>::scanning()
    return not tmp;
 }
 
-template<class Flash, class Modbus>
-bool Generator<Flash, Modbus>::scanning_down ()
+template<class Flash>
+bool Generator<Flash>::scanning_down ()
 {  
    pwm.duty_cycle = 100;
 
@@ -336,8 +270,8 @@ bool Generator<Flash, Modbus>::scanning_down ()
    return pwm.frequency != min_frequency ? true : false;      
 }
 
-template<class Flash, class Modbus>
-bool Generator<Flash, Modbus>::scanning_up ()
+template<class Flash>
+bool Generator<Flash>::scanning_up ()
 {  
    pwm.duty_cycle = 100;
 
@@ -352,8 +286,8 @@ bool Generator<Flash, Modbus>::scanning_up ()
    return pwm.frequency != max_frequency ? true : false;      
 }
 
-template<class Flash, class Modbus>
-bool Generator<Flash, Modbus>::is_resonance ()
+template<class Flash>
+bool Generator<Flash>::is_resonance ()
 {
    if (timer.event()) {
       if (pwm.frequency >= flash.a_resonance)
@@ -364,11 +298,11 @@ bool Generator<Flash, Modbus>::is_resonance ()
    return pwm.frequency == flash.a_resonance;
 }
 
-template<class Flash, class Modbus>
-bool Generator<Flash, Modbus>::power ()
+template<class Flash>
+bool Generator<Flash>::power ()
 {
    if (adc.current > current) {
-      flash.current = current = adc.current;
+      flash.a_current = current = adc.current;
    }
    if (on_power.event())   
       pwm.duty_cycle += pwm.duty_cycle < duty_cycle ? 1 : -1;

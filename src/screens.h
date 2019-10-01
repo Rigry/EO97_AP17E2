@@ -122,13 +122,15 @@ struct Main_screen : Screen {
 
    void draw() override {
       lcd.line(0).cursor(2).div_1000(frequency) << "кГц";
-      lcd.line(0).cursor(13).width(2) << (duty_cycle / 5) << '%';
+      lcd.line(0).cursor(13).width(2) << (duty_cycle) << '%';
       if (overheat) {
          lcd.line(1) << "ПЕРЕГРЕВ";
       } else {
         lcd.line(1) << "I="; lcd.line(1).cursor(2).div_1000(current) << "А";
       }
       lcd.line(1).cursor(10).width(2) << temperatura << "C";
+      lcd.line(1).cursor(14) << ::info[this->tune];
+      lcd.line(1).cursor(15) << ::info[this->mode];
    }
 
 };

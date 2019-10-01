@@ -16,6 +16,7 @@
 #include "pwm_.h"
 // #include "tune_up.h"
 #include "generator.h"
+#include "communication.h"
 
 using TX  = mcu::PA9;
 using RX  = mcu::PA10;
@@ -51,7 +52,8 @@ int main()
       uint8_t  modbus_address = 1;
       uint16_t model_number   = 0;
       uint16_t work_frequency = 18_kHz;
-      uint16_t current        = 0;
+      uint16_t a_current      = 0;
+      uint16_t m_current      = 0;
       uint16_t m_resonance    = 1_kHz;
       uint16_t a_resonance    = 1_kHz;
       uint8_t  power          = 100_percent;
@@ -73,9 +75,26 @@ int main()
 
    // auto us_on = Button<Enter>();
 
-   volatile decltype(auto) modbus = Modbus_slave<In_regs, Out_regs>
+   volatile decltype(auto) modbus = Modbus_slave<In_regs, Out_regs, coils_qty>
                  ::make<mcu::Periph::USART1, TX, RX, RTS>
                        (flash.modbus_address, flash.uart_set);
+
+   auto& work_flags = modbus.outRegs.operation;
+
+   // управление по модбас
+   modbus.force_single_coil_05[0] = [&](bool on) {
+      if (on)
+         state.on = true;
+      if (not on)
+         state.on = false;
+   };
+
+   modbus.force_single_coil_05[1] = [&](bool on) {
+      if (on)
+         flash.search = true;
+      if (not on)
+         flash.search = false;
+   };
 
    #define ADR(reg) GET_ADR(In_regs, reg)
    modbus.outRegs.device_code       = 9;
@@ -90,17 +109,21 @@ int main()
    volatile decltype(auto) pwm = PWM::make<mcu::Periph::TIM3, PWM_pin>(490);
    volatile decltype(auto) encoder = Encoder::make<mcu::Periph::TIM8, mcu::PC6, mcu::PC7, true>();
 
-   ADC_ adc_current;
+   ADC_ adc;
 
    using Flash  = decltype(flash);
-   using Modbus = Modbus_slave<In_regs, Out_regs>;
+   using Modbus = Modbus_slave<In_regs, Out_regs, coils_qty>;
+   using Generator = Generator<Flash>;
 
-   Generator <Flash, Modbus> work {adc_current, pwm, led_green, led_red, state, flash, modbus};
+   Generator generator {adc, pwm, led_green, led_red, state, flash};
+
+   Communication<Modbus, Generator> communication{modbus, generator};
+
 
    auto up    = Button<Right>();
    auto down  = Button<Left>();
    auto enter = Button<Enter>();
-   // enter.set_down_callback([&]{flash.factory_number = 10;});
+   enter.set_down_callback([&]{flash.factory_number = 10;});
    constexpr auto hd44780_pins = HD44780_pins<RS, RW, E, DB4, DB5, DB6, DB7>{};
    [[maybe_unused]] auto menu = Menu (
       hd44780_pins, encoder, up, down, enter
@@ -111,7 +134,8 @@ int main()
    );
    
    while(1){
-      work();
+      generator();
+      communication();
       __WFI();
    }
 }
