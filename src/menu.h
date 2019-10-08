@@ -2,15 +2,14 @@
 
 #include "string_buffer.h"
 #include "hd44780.h"
+#include "generator.h"
 #include "select_screen.h"
 #include "set_screen.h"
 #include "screens.h"
 #include "button.h"
-// #include "tune_up.h"
 #include "encoder_rotary.h"
-#include "generator.h"
 
-template<class Pins, class Flash_data, class Modbus_regs, size_t qty_lines = 4, size_t size_line = 20>
+template<class Pins, class Flash_data, class Generator, size_t qty_lines = 4, size_t size_line = 20>
 struct Menu : TickSubscriber {
    String_buffer lcd {};
    HD44780& hd44780 {HD44780::make(Pins{}, lcd.get_buffer())};
@@ -19,8 +18,7 @@ struct Menu : TickSubscriber {
    Button_event& down;
    Button_event& enter;
    Flash_data&   flash;
-   Modbus_regs&  modbus;
-   Mode&         mode;
+   Generator&  generator;
    PWM&          pwm;
 
    Screen* current_screen {&main_screen};
@@ -42,11 +40,10 @@ struct Menu : TickSubscriber {
       , Button_event& down
       , Button_event& enter
       , Flash_data&   flash
-      , Modbus_regs&  modbus
-      , Mode&         mode
+      , Generator&  generator
       , PWM&          pwm
    ) : encoder{encoder}, up{up}, down{down}, enter{enter}
-      , flash{flash}, modbus{modbus}, mode{mode}, pwm{pwm}
+      , flash{flash}, generator{generator}, pwm{pwm}
    {
       tick_subscribe();
       current_screen->init();
@@ -57,15 +54,9 @@ struct Menu : TickSubscriber {
           lcd, buttons_events
       //   , Enter_event  { [this](auto c){enter.set_click_callback(c);}}
         , Out_callback { [this]{ change_screen(main_select); }}
-        , modbus.temperatura
-        , modbus.duty_cycle
-        , modbus.frequency
-        , modbus.current
-        , mode.overheat
-        , flash.search
-        , flash.m_control
-        , flash.m_search
-        , mode.on
+        , generator.temperatura
+        , generator.current_mA
+        , generator.flags
         , pwm
    };
 
@@ -82,10 +73,11 @@ struct Menu : TickSubscriber {
         , Line {"Аварии"         ,[this]{change_screen(alarm_select); }}
    };
 
-   Select_screen<3> option_select {
+   Select_screen<4> option_select {
           lcd, buttons_events
         , Out_callback    {       [this]{ change_screen(main_select);    }}
         , Line {"Mощность"       ,[this]{ change_screen(duty_cycle_set); }}
+        , Line {"Макс. ток"      ,[this]{ change_screen(max_current_set);}}
         , Line {"Рабочая частота",[this]{ change_screen(frequency_set);  }}
         , Line {"Температура"    ,[this]{ change_screen(temp_select);    }}
    };
@@ -153,6 +145,19 @@ struct Menu : TickSubscriber {
             change_screen(option_select); }}
    };
 
+   uint16_t max_current{flash.max_current};
+   Set_screen<uint16_t> max_current_set {
+        lcd, buttons_events
+      , "Допустимый ток."
+      , " mA"
+      , max_current
+      , Min<uint16_t>{0_mA}, Max<uint16_t>{12000_mA}
+      , Out_callback    { [this]{ change_screen(option_select); }}
+      , Enter_callback  { [this]{ 
+         flash.max_current = max_current;
+            change_screen(option_select); }}
+   };
+
    uint16_t work_frequency{flash.work_frequency};
    Set_screen<uint16_t> frequency_set {
         lcd, buttons_events
@@ -179,7 +184,7 @@ struct Menu : TickSubscriber {
       , Out_callback  { [this]{ change_screen(temp_select); }}
       , "Текущая темпер."
       , " С"
-      , modbus.temperatura
+      , generator.temperatura
    };
    
    uint8_t temperatura{flash.temperatura};
@@ -208,39 +213,12 @@ struct Menu : TickSubscriber {
             change_screen(temp_select); }}
    };
 
-   // uint8_t tune_{flash.m_search};
-   // Set_screen<uint8_t,tune_to_string> tune_select {
-   //      lcd, buttons_events
-   //    , "Настройка"
-   //    , ""
-   //    , tune_
-   //    , Min<uint8_t>{0}, Max<uint8_t>{::tune.size() - 1}
-   //    , Out_callback    { [this]{ change_screen(mode_set); }}
-   //    , Enter_callback  { [this]{ 
-   //       flash.m_search = tune_;
-   //       flash.m_search = true;
-   //          change_screen(main_select); }}
-   // };
-
-   // uint8_t search_ {flash.search};
-   // Set_screen<uint8_t, search_to_string> end_tune {
-   //      lcd, buttons_events
-   //    , "Закончить нас-ку"
-   //    , ""
-   //    , search_
-   //    , Min<uint8_t>{0}, Max<uint8_t>{::search.size() - 1}
-   //    , Out_callback    { [this]{ change_screen(main_select); }}
-   //    , Enter_callback  { [this]{ 
-   //       flash.search = search_;
-   //          change_screen(main_select);
-   //    }}
-   // };
-
-   Select_screen<3> alarm_select {
+   Select_screen<2> alarm_select {
           lcd, buttons_events
         , Out_callback    { [this]{ change_screen(main_select);  }}
-        , Line {"Раздел в",[]{}}
-        , Line {"разработке" ,[]{}}
+        , Line {"Посмотреть",[]{}}
+        , Line {"Сбросить"  ,[this]{generator.flags.no_load = generator.flags.overload = false;
+                                    change_screen(main_select); }}
 
    };
 

@@ -56,61 +56,40 @@ struct Main_screen : Screen {
    Buttons_events eventers;
    Callback<> out_callback;
    uint16_t& temperatura;
-   uint16_t& duty_cycle;
-   uint16_t& frequency;
    uint16_t& current;
-   bool& overheat;
-   bool& search;
-   bool& mode;
-   bool& tune;
-   bool& on;
-
+   Flags& flags;
    PWM& pwm;
 
    Main_screen(
-      String_buffer& lcd
-      // , Enter_event enter_event
+        String_buffer& lcd
       , Buttons_events eventers
       , Out_callback out_callback
       , uint16_t& temperatura
-      , uint16_t& duty_cycle
-      , uint16_t& frequency
       , uint16_t& current
-      , bool& overheat
-      , bool& search
-      , bool& mode
-      , bool& tune
-      , bool& on
+      , Flags& flags
       , PWM& pwm
       
    ) : lcd          {lcd}
-   //   , enter_event  {enter_event.value}
      , eventers     {eventers}
      , out_callback {out_callback.value}
      , temperatura  {temperatura}
-     , duty_cycle   {duty_cycle}
-     , frequency    {frequency}
      , current      {current}
-     , overheat     {overheat}
-     , search       {search}
-     , mode         {mode}
-     , tune         {tune}
-     , on           {on}
+     , flags        {flags}
      , pwm          {pwm}
    {}
 
    void init() override {
-      eventers.enter ([this]{ on ^= 1;});
-      eventers.up    ([this]{ pwm.frequency += (tune and search) or mode ?  10 : 0;});
-      eventers.down  ([this]{ pwm.frequency += (tune and search) or mode ? -10 : 0;});
+      eventers.enter ([this]{ flags.on ^= 1;});
+      eventers.up    ([this]{ pwm.frequency += (flags.manual_tune and flags.search) or flags.manual ?  10 : 0;});
+      eventers.down  ([this]{ pwm.frequency += (flags.manual_tune and flags.search) or flags.manual ? -10 : 0;});
       eventers.out   ([this]{ out_callback(); });
       lcd.clear();
       lcd.line(0) << "F=";
       lcd.line(0).cursor(11) << "P=";
       lcd.line(1) << "I=";
       lcd.line(1).cursor(10).width(2) << temperatura << "C";
-      lcd.line(1).cursor(14) << ::info[this->tune];
-      lcd.line(1).cursor(15) << ::info[this->mode];
+      lcd.line(1).cursor(14) << ::info[this->flags.manual_tune];
+      lcd.line(1).cursor(15) << ::info[this->flags.manual];
    }
 
    void deinit() override {
@@ -121,16 +100,25 @@ struct Main_screen : Screen {
    }
 
    void draw() override {
-      lcd.line(0).cursor(2).div_1000(frequency) << "кГц";
-      lcd.line(0).cursor(13).width(2) << (duty_cycle) << '%';
-      if (overheat) {
-         lcd.line(1) << "ПЕРЕГРЕВ";
-      } else {
-        lcd.line(1) << "I="; lcd.line(1).cursor(2).div_1000(current) << "А";
+      lcd.line(0).cursor(2).div_1000(pwm.frequency) << "кГц";
+      lcd.line(0).cursor(13).width(2) << (pwm.duty_cycle / 5) << '%';
+      lcd.line(1).cursor(10).width(2) << temperatura << "C ";
+      lcd.line(1).cursor(14) << ::info[this->flags.manual_tune];
+      lcd.line(1).cursor(15) << ::info[this->flags.manual];
+      
+      if (not flags.is_alarm()) {
+         lcd.line(1) << "I="; lcd.line(1).cursor(2).div_1000(current) << "А ";
+         return;
+      } else if (flags.overheat) {
+         lcd.line(1) << "OVERHAET";
+         return;
+      } else if (flags.no_load) {
+         lcd.line(1) << "NO LOAD ";
+         return;
+      } else if (flags.overload) {
+         lcd.line(1) << "OVERLOAD";
+         return;
       }
-      lcd.line(1).cursor(10).width(2) << temperatura << "C";
-      lcd.line(1).cursor(14) << ::info[this->tune];
-      lcd.line(1).cursor(15) << ::info[this->mode];
    }
 
 };

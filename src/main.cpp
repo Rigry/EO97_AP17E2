@@ -8,15 +8,9 @@
 #include "pin.h"
 #include "literals.h"
 #include "button.h"
-#include "flash.h"
-#include "timers.h"
 #include "menu.h"
-#include "modbus_slave.h"
-#include "adc.h"
-#include "pwm_.h"
-// #include "tune_up.h"
-#include "generator.h"
 #include "communication.h"
+#include "generator.h"
 
 using TX  = mcu::PA9;
 using RX  = mcu::PA10;
@@ -52,10 +46,11 @@ int main()
       uint8_t  modbus_address = 1;
       uint16_t model_number   = 0;
       uint16_t work_frequency = 18_kHz;
+      uint16_t max_current    = 0;
       uint16_t a_current      = 0;
       uint16_t m_current      = 0;
-      uint16_t m_resonance    = 1_kHz;
-      uint16_t a_resonance    = 1_kHz;
+      uint16_t m_resonance    = 18_kHz;
+      uint16_t a_resonance    = 18_kHz;
       uint8_t  power          = 100_percent;
       uint8_t  temperatura    = 65;
       uint8_t  recovery       = 45;
@@ -79,14 +74,14 @@ int main()
                  ::make<mcu::Periph::USART1, TX, RX, RTS>
                        (flash.modbus_address, flash.uart_set);
 
-   auto& work_flags = modbus.outRegs.operation;
+   auto& work_flags = modbus.outRegs.flags;
 
    // управление по модбас
    modbus.force_single_coil_05[0] = [&](bool on) {
       if (on)
-         state.on = true;
+         work_flags.on = true;
       if (not on)
-         state.on = false;
+         work_flags.on = false;
    };
 
    modbus.force_single_coil_05[1] = [&](bool on) {
@@ -100,8 +95,7 @@ int main()
    modbus.outRegs.device_code       = 9;
    modbus.outRegs.factory_number    = flash.factory_number;
    modbus.outRegs.modbus_address    = flash.modbus_address;
-   modbus.outRegs.uart_set          = flash.uart_set;
-   // modbus.outRegs.operation.manual  = bool(flash.mode);       
+   modbus.outRegs.uart_set          = flash.uart_set;    
    modbus.arInRegsMax[ADR(uart_set)]= 0b11111111;
    modbus.inRegsMin.modbus_address  = 1;
    modbus.inRegsMax.modbus_address  = 255;
@@ -115,7 +109,7 @@ int main()
    using Modbus = Modbus_slave<In_regs, Out_regs, coils_qty>;
    using Generator = Generator<Flash>;
 
-   Generator generator {adc, pwm, led_green, led_red, state, flash};
+   Generator generator {adc, pwm, led_green, led_red, work_flags, flash};
 
    Communication<Modbus, Generator> communication{modbus, generator};
 
@@ -128,8 +122,7 @@ int main()
    [[maybe_unused]] auto menu = Menu (
       hd44780_pins, encoder, up, down, enter
       , flash
-      , modbus.outRegs
-      , state
+      , generator
       , pwm
    );
    

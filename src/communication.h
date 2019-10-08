@@ -3,16 +3,6 @@
 #include "flash.h"
 #include "modbus_slave.h"
 
-
-struct Operation {
-   bool on            :1; 
-   bool search        :1;
-   bool manual        :1;
-   bool manual_tune   :1;
-   bool overheat      :1;
-   uint16_t           :11; //Bits 11:2 res: Reserved, must be kept cleared
-}__attribute__((packed));
-
 struct In_regs {
    
    UART::Settings uart_set;         // 0
@@ -22,9 +12,10 @@ struct In_regs {
    uint16_t frequency;              // 4
    uint16_t work_frequency;         // 5
    uint16_t power;                  // 6
-   uint16_t max_temp;               // 7
-   uint16_t recovery_temp;          // 8
-   Operation operation;             // 9
+   uint16_t max_current;            // 7
+   uint16_t max_temp;               // 8
+   uint16_t recovery_temp;          // 9
+   Flags flags;                     // 10
 
 }__attribute__((packed));
 
@@ -41,17 +32,21 @@ struct Out_regs {
    uint16_t m_resonance;            // 8
    uint16_t a_resonance;            // 9
    uint16_t current;                // 10
-   uint16_t a_current;              // 11
-   uint16_t m_current;              // 12
-   uint16_t temperatura;            // 13
-   uint16_t max_temp;               // 14
-   uint16_t recovery_temp;          // 15
-   Operation operation;             // 16
+   uint16_t max_current;            // 11
+   uint16_t a_current;              // 12
+   uint16_t m_current;              // 13
+   uint16_t temperatura;            // 14
+   uint16_t max_temp;               // 15
+   uint16_t recovery_temp;          // 16
+   Flags flags;                     // 17
 
 };//__attribute__((packed));
 
+#define ADR(reg) GET_ADR(In_regs, reg)
+
 // колбеки для коилов далее
 constexpr auto coils_qty {2};
+
 
 template<class Modbus, class Generator>
 class Communication
@@ -69,23 +64,26 @@ public:
 
    void operator() (){
 
-      modbus.outRegs.work_frequency        = generator.flash.work_frequency;
-      modbus.outRegs.frequency             = generator.pwm.frequency;
-      modbus.outRegs.a_resonance           = generator.flash.a_resonance;
-      modbus.outRegs.m_resonance           = generator.flash.m_resonance;
-      modbus.outRegs.current               = generator.milliamper(generator.adc.current);
-      modbus.outRegs.temperatura           = generator.temperatura;
-      modbus.outRegs.max_temp              = generator.flash.temperatura;
-      modbus.outRegs.recovery_temp         = generator.flash.recovery;
-      modbus.outRegs.a_current             = generator.milliamper(generator.flash.a_current);
-      modbus.outRegs.m_current             = generator.milliamper(generator.flash.m_current);
-      modbus.outRegs.power                 = generator.flash.power;
-      modbus.outRegs.duty_cycle            = generator.pwm.duty_cycle / 5;
-      modbus.outRegs.operation.on          = generator.mode.on & not generator.overheat;
-      modbus.outRegs.operation.search      = generator.flash.search;
-      modbus.outRegs.operation.manual      = generator.flash.m_control;
-      modbus.outRegs.operation.manual_tune = generator.flash.m_search;
-      modbus.outRegs.operation.overheat    = generator.overheat;
+      modbus.outRegs.work_frequency    = generator.flash.work_frequency;
+      modbus.outRegs.frequency         = generator.pwm.frequency;
+      modbus.outRegs.a_resonance       = generator.flash.a_resonance;
+      modbus.outRegs.m_resonance       = generator.flash.m_resonance;
+      modbus.outRegs.max_current       = generator.flash.max_current;
+      modbus.outRegs.current           = generator.current_mA;
+      modbus.outRegs.temperatura       = generator.temperatura;
+      modbus.outRegs.max_temp          = generator.flash.temperatura;
+      modbus.outRegs.recovery_temp     = generator.flash.recovery;
+      modbus.outRegs.a_current         = generator.milliamper(generator.flash.a_current);
+      modbus.outRegs.m_current         = generator.milliamper(generator.flash.m_current);
+      modbus.outRegs.power             = generator.flash.power;
+      modbus.outRegs.duty_cycle        = generator.pwm.duty_cycle / 5;
+     
+      modbus.outRegs.flags.search      = generator.flash.search;
+      modbus.outRegs.flags.manual      = generator.flash.m_control;
+      modbus.outRegs.flags.manual_tune = generator.flash.m_search;
+      // modbus.outRegs.flags.overheat    = generator.flags.overheat;
+      // modbus.outRegs.flags.no_load     = generator.flags.no_load;
+      // modbus.outRegs.flags.overload    = generator.flags.overload;
 
 
       modbus([&](uint16_t registrAddress) {
@@ -122,17 +120,20 @@ public:
             case ADR(power):
                generator.flash.power = modbus.inRegs.power;
             break;
+            case ADR(max_current):
+               generator.flash.max_current = modbus.inRegs.max_current;
+            break;
             case ADR(max_temp):
                generator.flash.temperatura = modbus.inRegs.max_temp;
             break;
             case ADR(recovery_temp):
                generator.flash.recovery = modbus.inRegs.recovery_temp;
             break;
-            case ADR(operation):
-               // generator.mode.on          = modbus.inRegs.operation.on;
-               // generator.flash.search     = modbus.inRegs.operation.search;
-               generator.flash.m_control  = modbus.inRegs.operation.manual;
-               generator.flash.m_search   = modbus.inRegs.operation.manual_tune; 
+            case ADR(flags):
+               // generator.mode.on          = modbus.inRegs.flags.on;
+               // generator.flash.search     = modbus.inRegs.flags.search;
+               generator.flash.m_control  = modbus.inRegs.flags.manual;
+               generator.flash.m_search   = modbus.inRegs.flags.manual_tune; 
             break;
          } // switch
       });
